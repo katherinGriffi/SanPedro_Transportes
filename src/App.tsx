@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer } from 'lucide-react';
+import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, Loader } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
 
@@ -28,6 +28,7 @@ function App() {
   const [lastEntry, setLastEntry] = useState(null);
   const [allEntries, setAllEntries] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
+  const [isPageLoading, setIsPageLoading] = useState(true); // Novo estado para carregamento da página
 
   // Verificar sessão ao carregar a página
   useEffect(() => {
@@ -37,10 +38,11 @@ function App() {
         setIsLoggedIn(true);
         setUserId(session.user.id);
         setEmail(session.user.email);
-        fetchLastEntry();
-        fetchAllEntries();
-        fetchWorkspaces();
+        await fetchLastEntry();
+        await fetchAllEntries();
+        await fetchWorkspaces();
       }
+      setIsPageLoading(false); // Finalizar carregamento da página
     };
     checkSession();
   }, []);
@@ -62,18 +64,20 @@ function App() {
     return () => clearInterval(interval);
   }, [isWorking, timeEntry]);
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCurrentLocation(position.coords);
-        },
-        () => {
-          toast.error('No se pudo obtener su ubicación');
-        }
-      );
-    }
-  }, []);
+  // Obter geolocalização com timeout
+  const getLocation = () => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocalización no soportada'));
+      } else {
+        navigator.geolocation.getCurrentPosition(
+          (position) => resolve(position.coords),
+          (error) => reject(error),
+          { timeout: 10000 } // Timeout de 10 segundos
+        );
+      }
+    });
+  };
 
   const fetchWorkspaces = async () => {
     try {
@@ -155,9 +159,9 @@ function App() {
       setIsLoggedIn(true);
       setUserId(user.id);
       toast.success('Inicio de sesión exitoso!');
-      fetchLastEntry();
-      fetchAllEntries();
-      fetchWorkspaces();
+      await fetchLastEntry();
+      await fetchAllEntries();
+      await fetchWorkspaces();
     } catch (error) {
       toast.error('Error al iniciar sesión. Inténtelo de nuevo.');
     } finally {
@@ -174,55 +178,41 @@ function App() {
     if (isProcessing) return;
     setIsProcessing(true);
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const selectedWorkplace = workplace === 'Otro' ? customWorkplace : workplace;
+    try {
+      const coords = await getLocation(); // Obter localização com timeout
+      const selectedWorkplace = workplace === 'Otro' ? customWorkplace : workplace;
 
-            const newEntry = {
-              user_id: userId,
-              workplace: selectedWorkplace,
-              start_time: new Date().toISOString(),
-              start_latitude: position.coords.latitude,
-              start_longitude: position.coords.longitude,
-            };
+      const newEntry = {
+        user_id: userId,
+        workplace: selectedWorkplace,
+        start_time: new Date().toISOString(),
+        start_latitude: coords.latitude,
+        start_longitude: coords.longitude,
+      };
 
-            const { data: entry, error } = await supabase
-              .from('time_entries')
-              .insert([newEntry])
-              .select()
-              .single();
+      const { data: entry, error } = await supabase
+        .from('time_entries')
+        .insert([newEntry])
+        .select()
+        .single();
 
-            if (error) throw error;
+      if (error) throw error;
 
-            setTimeEntry(entry);
-            setIsWorking(true);
-            setCurrentLocation(position.coords);
-            localStorage.setItem('timeEntry', JSON.stringify(entry));
-            toast.success('Inicio del turno registrado!');
-            fetchAllEntries();
-          } catch (error) {
-            console.error('Error al iniciar el turno:', error);
-            toast.error('Error al registrar el inicio del turno');
-          } finally {
-            setIsProcessing(false);
-          }
-        },
-        () => {
-          toast.error('No se pudo obtener su ubicación');
-          setIsProcessing(false);
-        }
-      );
+      setTimeEntry(entry);
+      setIsWorking(true);
+      setCurrentLocation(coords);
+      localStorage.setItem('timeEntry', JSON.stringify(entry));
+      toast.success('Inicio del turno registrado!');
+      await fetchAllEntries();
+    } catch (error) {
+      console.error('Error al iniciar el turno:', error);
+      toast.error('Error al registrar el inicio del turno');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleEndWork = async () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocalización no soportada');
-      return;
-    }
-
     if (!timeEntry?.id) {
       toast.error('No se encontró ningún turno activo');
       return;
@@ -231,48 +221,49 @@ function App() {
     if (isProcessing) return;
     setIsProcessing(true);
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const updates = {
-            end_time: new Date().toISOString(),
-            end_latitude: position.coords.latitude,
-            end_longitude: position.coords.longitude,
-          };
+    try {
+      const coords = await getLocation(); // Obter localização com timeout
 
-          const { data: updatedEntry, error } = await supabase
-            .from('time_entries')
-            .update(updates)
-            .eq('id', timeEntry.id)
-            .select()
-            .single();
+      const updates = {
+        end_time: new Date().toISOString(),
+        end_latitude: coords.latitude,
+        end_longitude: coords.longitude,
+      };
 
-          if (error) throw error;
+      const { data: updatedEntry, error } = await supabase
+        .from('time_entries')
+        .update(updates)
+        .eq('id', timeEntry.id)
+        .select()
+        .single();
 
-          const totalTime = formatDuration(new Date(updates.end_time).getTime() - new Date(timeEntry.start_time).getTime());
-          toast.success(`Turno finalizado! Tiempo total trabajado: ${totalTime}`);
+      if (error) throw error;
 
-          setTimeEntry(null);
-          setIsWorking(false);
-          setElapsedTime(0);
-          setCurrentLocation(null);
-          localStorage.removeItem('timeEntry');
-          setLastEntry(null);
-          fetchAllEntries();
-        } catch (error) {
-          console.error('Error al finalizar el turno:', error);
-          toast.error('Error al registrar el fin del turno');
-        } finally {
-          setIsProcessing(false);
-        }
-      },
-      (error) => {
-        console.error('Error al obtener la ubicación:', error);
-        toast.error('No se pudo obtener su ubicación');
-        setIsProcessing(false);
-      }
-    );
+      const totalTime = formatDuration(new Date(updates.end_time).getTime() - new Date(timeEntry.start_time).getTime());
+      toast.success(`Turno finalizado! Tiempo total trabajado: ${totalTime}`);
+
+      setTimeEntry(null);
+      setIsWorking(false);
+      setElapsedTime(0);
+      setCurrentLocation(null);
+      localStorage.removeItem('timeEntry');
+      setLastEntry(null);
+      await fetchAllEntries();
+    } catch (error) {
+      console.error('Error al finalizar el turno:', error);
+      toast.error('Error al registrar el fin del turno');
+    } finally {
+      setIsProcessing(false);
+    }
   };
+
+  if (isPageLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center">
+        <Loader className="w-8 h-8 text-white animate-spin" />
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return (
