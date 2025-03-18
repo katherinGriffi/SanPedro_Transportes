@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, ExternalLink } from 'lucide-react';
+import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
 
