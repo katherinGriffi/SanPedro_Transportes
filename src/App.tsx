@@ -272,7 +272,7 @@ function App() {
             <Truck className="w-12 h-12 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-center mb-8 text-gray-800">
-            Sistema de Registro
+            San Pedro Cargo
           </h1>
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
@@ -331,7 +331,7 @@ function App() {
                   San Pedro Cargo
                 </h1>
                 <p className="text-sm text-gray-500">
-                  Sistema de Registro
+                  San Pedro Cargo
                 </p>
               </div>
             </div>
