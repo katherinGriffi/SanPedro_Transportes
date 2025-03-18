@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, Loader } from 'lucide-react';
+import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
 
@@ -20,7 +20,6 @@ function App() {
   const [timeEntry, setTimeEntry] = useState(null);
   const [isWorking, setIsWorking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -28,24 +27,6 @@ function App() {
   const [lastEntry, setLastEntry] = useState(null);
   const [allEntries, setAllEntries] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
-  const [isPageLoading, setIsPageLoading] = useState(true);
-
-  // Verificar sessão ao carregar a página
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (session) {
-        setIsLoggedIn(true);
-        setUserId(session.user.id);
-        setEmail(session.user.email);
-        await fetchLastEntry();
-        await fetchAllEntries();
-        await fetchWorkspaces();
-      }
-      setIsPageLoading(false);
-    };
-    checkSession();
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -64,20 +45,26 @@ function App() {
     return () => clearInterval(interval);
   }, [isWorking, timeEntry]);
 
-  // Obter geolocalização com timeout
-  const getLocation = () => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Geolocalización no soportada'));
-      } else {
-        navigator.geolocation.getCurrentPosition(
-          (position) => resolve(position.coords),
-          (error) => reject(error),
-          { timeout: 10000 } // Timeout de 10 segundos
-        );
-      }
-    });
-  };
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation(position.coords);
+        },
+        () => {
+          toast.error('Não foi possível obter sua localização');
+        }
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isLoggedIn && userId) {
+      fetchLastEntry();
+      fetchAllEntries();
+      fetchWorkspaces();
+    }
+  }, [isLoggedIn, userId]);
 
   const fetchWorkspaces = async () => {
     try {
@@ -93,8 +80,8 @@ function App() {
         setWorkplace(data[0].name);
       }
     } catch (error) {
-      console.error('Error al buscar espacios de trabajo:', error);
-      toast.error('Error al cargar los lugares de trabajo');
+      console.error('Erro ao buscar workspaces:', error);
+      toast.error('Erro ao carregar locais de trabalho');
     }
   };
 
@@ -115,10 +102,10 @@ function App() {
         setLastEntry(data);
         setTimeEntry(data);
         setIsWorking(true);
-        toast('Tienes un registro pendiente!', { icon: '⚠️' });
+        toast('Você tem um apontamento pendente!', { icon: '⚠️' });
       }
     } catch (error) {
-      console.error('Error al buscar último registro pendiente:', error);
+      console.error('Erro ao buscar último registro pendente:', error);
     }
   };
 
@@ -137,7 +124,7 @@ function App() {
         setAllEntries(data);
       }
     } catch (error) {
-      console.error('Error al buscar todos los registros:', error);
+      console.error('Erro ao buscar todos os registros:', error);
     }
   };
 
@@ -152,19 +139,15 @@ function App() {
       });
 
       if (error || !user) {
-        toast.error('Usuario o contraseña inválidos');
+        toast.error('Usuário ou senha inválidos');
         return;
       }
 
       setIsLoggedIn(true);
       setUserId(user.id);
-      setEmail(user.email);
-      await fetchLastEntry();
-      await fetchAllEntries();
-      await fetchWorkspaces();
-      toast.success('Inicio de sesión exitoso!');
+      toast.success('Login realizado com sucesso!');
     } catch (error) {
-      toast.error('Error al iniciar sesión. Inténtelo de nuevo.');
+      toast.error('Erro ao realizar login. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -172,99 +155,100 @@ function App() {
 
   const handleStartWork = async () => {
     if (!isLoggedIn || !userId) {
-      toast.error('Usuario no autenticado');
+      toast.error('Usuário não autenticado');
       return;
     }
 
-    if (isProcessing) return;
-    setIsProcessing(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const selectedWorkplace = workplace === 'Outro' ? customWorkplace : workplace;
 
-    try {
-      const coords = await getLocation();
-      const selectedWorkplace = workplace === 'Otro' ? customWorkplace : workplace;
+            const newEntry = {
+              user_id: userId,
+              workplace: selectedWorkplace,
+              start_time: new Date().toISOString(),
+              start_latitude: position.coords.latitude,
+              start_longitude: position.coords.longitude,
+            };
 
-      const newEntry = {
-        user_id: userId,
-        workplace: selectedWorkplace,
-        start_time: new Date().toISOString(),
-        start_latitude: coords.latitude,
-        start_longitude: coords.longitude,
-      };
+            const { data: entry, error } = await supabase
+              .from('time_entries')
+              .insert([newEntry])
+              .select()
+              .single();
 
-      const { data: entry, error } = await supabase
-        .from('time_entries')
-        .insert([newEntry])
-        .select()
-        .single();
+            if (error) throw error;
 
-      if (error) throw error;
-
-      setTimeEntry(entry);
-      setIsWorking(true);
-      setCurrentLocation(coords);
-      localStorage.setItem('timeEntry', JSON.stringify(entry));
-      toast.success('Inicio del turno registrado!');
-      await fetchAllEntries();
-    } catch (error) {
-      console.error('Error al iniciar el turno:', error);
-      toast.error('Error al registrar el inicio del turno');
-    } finally {
-      setIsProcessing(false);
+            setTimeEntry(entry);
+            setIsWorking(true);
+            setCurrentLocation(position.coords);
+            localStorage.setItem('timeEntry', JSON.stringify(entry));
+            toast.success('Início do expediente registrado!');
+            fetchAllEntries();
+          } catch (error) {
+            console.error('Erro ao iniciar expediente:', error);
+            toast.error('Erro ao registrar início do expediente');
+          }
+        },
+        () => {
+          toast.error('Não foi possível obter sua localização');
+        }
+      );
     }
   };
 
   const handleEndWork = async () => {
-    if (!timeEntry?.id) {
-      toast.error('No se encontró ningún turno activo');
+    if (!navigator.geolocation) {
+      toast.error('Geolocalização não suportada');
       return;
     }
 
-    if (isProcessing) return;
-    setIsProcessing(true);
-
-    try {
-      const coords = await getLocation();
-
-      const updates = {
-        end_time: new Date().toISOString(),
-        end_latitude: coords.latitude,
-        end_longitude: coords.longitude,
-      };
-
-      const { data: updatedEntry, error } = await supabase
-        .from('time_entries')
-        .update(updates)
-        .eq('id', timeEntry.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const totalTime = formatDuration(new Date(updates.end_time).getTime() - new Date(timeEntry.start_time).getTime());
-      toast.success(`Turno finalizado! Tiempo total trabajado: ${totalTime}`);
-
-      setTimeEntry(null);
-      setIsWorking(false);
-      setElapsedTime(0);
-      setCurrentLocation(null);
-      localStorage.removeItem('timeEntry');
-      setLastEntry(null);
-      await fetchAllEntries();
-    } catch (error) {
-      console.error('Error al finalizar el turno:', error);
-      toast.error('Error al registrar el fin del turno');
-    } finally {
-      setIsProcessing(false);
+    if (!timeEntry?.id) {
+      toast.error('Nenhum expediente ativo encontrado');
+      return;
     }
-  };
 
-  if (isPageLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center">
-        <Loader className="w-8 h-8 text-white animate-spin" />
-      </div>
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const updates = {
+            end_time: new Date().toISOString(),
+            end_latitude: position.coords.latitude,
+            end_longitude: position.coords.longitude,
+          };
+
+          const { data: updatedEntry, error } = await supabase
+            .from('time_entries')
+            .update(updates)
+            .eq('id', timeEntry.id)
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          const totalTime = formatDuration(new Date(updates.end_time).getTime() - new Date(timeEntry.start_time).getTime());
+          toast.success(`Expediente finalizado! Tempo total trabalhado: ${totalTime}`);
+
+          setTimeEntry(null);
+          setIsWorking(false);
+          setElapsedTime(0);
+          setCurrentLocation(null);
+          localStorage.removeItem('timeEntry');
+          setLastEntry(null);
+          fetchAllEntries();
+        } catch (error) {
+          console.error('Erro ao finalizar expediente:', error);
+          toast.error('Erro ao registrar fim do expediente');
+        }
+      },
+      (error) => {
+        console.error('Erro ao obter localização:', error);
+        toast.error('Não foi possível obter sua localização');
+      }
     );
-  }
+  };
 
   if (!isLoggedIn) {
     return (
@@ -275,7 +259,7 @@ function App() {
             <Truck className="w-12 h-12 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-center mb-8 text-gray-800">
-            Sistema de Registro
+            Sistema de Apontamento
           </h1>
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
@@ -289,12 +273,11 @@ function App() {
                 placeholder="Email"
                 required
                 disabled={isLoading}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Contraseña
+                Senha
               </label>
               <input
                 type="password"
@@ -311,7 +294,7 @@ function App() {
               disabled={isLoading}
             >
               <LogIn className="w-5 h-5 mr-2" />
-              {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+              {isLoading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
         </div>
@@ -334,7 +317,7 @@ function App() {
                   San Pedro Cargo
                 </h1>
                 <p className="text-sm text-gray-500">
-                  Sistema de Registro
+                  Sistema de Apontamento
                 </p>
               </div>
             </div>
@@ -345,7 +328,7 @@ function App() {
               </div>
               <div className="flex items-center space-x-2 text-gray-700">
                 <Clock className="w-5 h-5" />
-                <span>{currentTime.toLocaleTimeString('es-ES')}</span>
+                <span>{currentTime.toLocaleTimeString('pt-BR')}</span>
               </div>
               {currentLocation && (
                 <div className="flex items-center space-x-2 text-gray-700">
@@ -375,15 +358,15 @@ function App() {
           {/* Status Card */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Estado del Turno
+              Status do Expediente
             </h2>
             <div className="space-y-4">
               <div className="flex items-start space-x-3">
                 <Calendar className="w-5 h-5 text-gray-500 mt-1" />
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Fecha</p>
+                  <p className="text-sm font-medium text-gray-700">Data</p>
                   <p className="text-sm text-gray-600">
-                    {new Date().toLocaleDateString('es-ES', {
+                    {new Date().toLocaleDateString('pt-BR', {
                       weekday: 'long',
                       year: 'numeric',
                       month: 'long',
@@ -398,9 +381,9 @@ function App() {
                   <div className="flex items-start space-x-3">
                     <Clock className="w-5 h-5 text-gray-500 mt-1" />
                     <div>
-                      <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
+                      <p className="text-sm font-medium text-gray-700">Início do Expediente</p>
                       <p className="text-sm text-gray-600">
-                        {new Date(timeEntry.start_time).toLocaleTimeString('es-ES')}
+                        {new Date(timeEntry.start_time).toLocaleTimeString('pt-BR')}
                       </p>
                     </div>
                   </div>
@@ -408,7 +391,7 @@ function App() {
                   <div className="flex items-start space-x-3">
                     <Timer className="w-5 h-5 text-gray-500 mt-1" />
                     <div>
-                      <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
+                      <p className="text-sm font-medium text-gray-700">Tempo Decorrido</p>
                       <p className="text-xl font-bold text-blue-600">
                         {formatDuration(elapsedTime)}
                       </p>
@@ -418,7 +401,7 @@ function App() {
                   <div className="flex items-start space-x-3">
                     <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
                     <div>
-                      <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
+                      <p className="text-sm font-medium text-gray-700">Local de Trabalho</p>
                       <p className="text-sm text-gray-600">{timeEntry.workplace}</p>
                     </div>
                   </div>
@@ -427,7 +410,7 @@ function App() {
                     <div className="flex items-start space-x-3">
                       <MapPin className="w-5 h-5 text-gray-500 mt-1" />
                       <div>
-                        <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
+                        <p className="text-sm font-medium text-gray-700">Localização Atual</p>
                         <p className="text-sm text-gray-600">
                           Lat: {currentLocation.latitude.toFixed(6)}<br />
                           Long: {currentLocation.longitude.toFixed(6)}
@@ -443,14 +426,14 @@ function App() {
           {/* Action Card */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              {isWorking ? 'Finalizar Turno' : 'Iniciar Turno'}
+              {isWorking ? 'Finalizar Expediente' : 'Iniciar Expediente'}
             </h2>
             
             {!isWorking ? (
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Lugar de Trabajo
+                    Local de Trabalho
                   </label>
                   <select
                     value={workplace}
@@ -462,20 +445,20 @@ function App() {
                         {workspace.name}
                       </option>
                     ))}
-                    <option value="Otro">Otro</option>
+                    <option value="Outro">Outro</option>
                   </select>
                 </div>
                 
-                {workplace === 'Otro' && (
+                {workplace === 'Outro' && (
                   <div className="mt-4">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Ingrese el lugar de trabajo manualmente
+                      Insira o local de trabalho manualmente
                     </label>
                     <input
                       type="text"
                       value={customWorkplace}
                       onChange={(e) => setCustomWorkplace(e.target.value)}
-                      placeholder="Ingrese el lugar de trabajo"
+                      placeholder="Digite o local de trabalho"
                       className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
                     />
                   </div>
@@ -483,11 +466,10 @@ function App() {
                 
                 <button
                   onClick={handleStartWork}
-                  disabled={isProcessing}
-                  className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+                  className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium"
                 >
                   <Clock className="w-5 h-5" />
-                  <span>{isProcessing ? 'Procesando...' : 'Iniciar Turno'}</span>
+                  <span>Iniciar Expediente</span>
                 </button>
               </div>
             ) : (
@@ -495,56 +477,54 @@ function App() {
                 <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
                   <div className="flex items-center space-x-2 text-yellow-800">
                     <MapPin className="w-5 h-5" />
-                    <span className="font-medium">Turno en progreso</span>
+                    <span className="font-medium">Expediente em andamento</span>
                   </div>
                   <p className="mt-1 text-sm text-yellow-700">
-                    Asegúrese de finalizar su turno antes de salir.
+                    Certifique-se de finalizar seu expediente antes de sair.
                   </p>
                 </div>
                 
                 <button
                   onClick={handleEndWork}
-                  disabled={isProcessing}
-                  className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+                  className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium"
                 >
                   <Clock className="w-5 h-5" />
-                  <span>{isProcessing ? 'Procesando...' : 'Finalizar Turno'}</span>
+                  <span>Finalizar Expediente</span>
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Último Registro Pendiente */}
+        {/* Último Registro Pendente */}
         {lastEntry && !isWorking && (
           <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Último Registro Pendiente
+              Último Registro Pendente
             </h2>
             <div className="space-y-4">
               <div className="flex items-start space-x-3">
                 <Clock className="w-5 h-5 text-gray-500 mt-1" />
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
+                  <p className="text-sm font-medium text-gray-700">Início do Expediente</p>
                   <p className="text-sm text-gray-600">
-                    {new Date(lastEntry.start_time).toLocaleTimeString('es-ES')}
+                    {new Date(lastEntry.start_time).toLocaleTimeString('pt-BR')}
                   </p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
                 <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
+                  <p className="text-sm font-medium text-gray-700">Local de Trabalho</p>
                   <p className="text-sm text-gray-600">{lastEntry.workplace}</p>
                 </div>
               </div>
               <button
                 onClick={handleEndWork}
-                disabled={isProcessing}
-                className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+                className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium"
               >
                 <Clock className="w-5 h-5" />
-                <span>{isProcessing ? 'Procesando...' : 'Finalizar Turno Pendiente'}</span>
+                <span>Finalizar Expediente Pendente</span>
               </button>
             </div>
           </div>
@@ -554,20 +534,20 @@ function App() {
         {allEntries.length > 0 && (
           <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Historial de Registros (Últimos 7)
+              Histórico de Registros (Últimos 7)
             </h2>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fecha y Hora de Inicio
+                      Data e Hora de Início
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fecha y Hora de Finalización
+                      Data e Hora de Término
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lugar de Trabajo
+                      Local de Trabalho
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Coordenadas
@@ -578,10 +558,10 @@ function App() {
                   {allEntries.map((entry) => (
                     <tr key={entry.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(entry.start_time).toLocaleString('es-ES')}
+                        {new Date(entry.start_time).toLocaleString('pt-BR')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {entry.end_time ? new Date(entry.end_time).toLocaleString('es-ES') : 'En progreso'}
+                        {entry.end_time ? new Date(entry.end_time).toLocaleString('pt-BR') : 'Em andamento'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {entry.workplace}
