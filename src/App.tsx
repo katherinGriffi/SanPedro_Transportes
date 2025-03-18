@@ -28,7 +28,7 @@ function App() {
   const [lastEntry, setLastEntry] = useState(null);
   const [allEntries, setAllEntries] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
-  const [isPageLoading, setIsPageLoading] = useState(true); // Novo estado para carregamento da página
+  const [isPageLoading, setIsPageLoading] = useState(true);
 
   // Verificar sessão ao carregar a página
   useEffect(() => {
@@ -42,7 +42,7 @@ function App() {
         await fetchAllEntries();
         await fetchWorkspaces();
       }
-      setIsPageLoading(false); // Finalizar carregamento da página
+      setIsPageLoading(false);
     };
     checkSession();
   }, []);
@@ -158,10 +158,11 @@ function App() {
 
       setIsLoggedIn(true);
       setUserId(user.id);
-      toast.success('Inicio de sesión exitoso!');
+      setEmail(user.email);
       await fetchLastEntry();
       await fetchAllEntries();
       await fetchWorkspaces();
+      toast.success('Inicio de sesión exitoso!');
     } catch (error) {
       toast.error('Error al iniciar sesión. Inténtelo de nuevo.');
     } finally {
@@ -179,7 +180,7 @@ function App() {
     setIsProcessing(true);
 
     try {
-      const coords = await getLocation(); // Obter localização com timeout
+      const coords = await getLocation();
       const selectedWorkplace = workplace === 'Otro' ? customWorkplace : workplace;
 
       const newEntry = {
@@ -222,7 +223,7 @@ function App() {
     setIsProcessing(true);
 
     try {
-      const coords = await getLocation(); // Obter localização com timeout
+      const coords = await getLocation();
 
       const updates = {
         end_time: new Date().toISOString(),
