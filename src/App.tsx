@@ -322,7 +322,281 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700">
       <Toaster position="top-right" />
-      {/* Resto do código... */}
+      
+      {/* Header */}
+      <div className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-3">
+              <Truck className="w-8 h-8 text-blue-800" />
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">
+                  San Pedro Cargo
+                </h1>
+                <p className="text-sm text-gray-500">
+                  Sistema de Registro
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-gray-700">
+                <User className="w-5 h-5" />
+                <span>{email}</span>
+              </div>
+              <div className="flex items-center space-x-2 text-gray-700">
+                <Clock className="w-5 h-5" />
+                <span>{currentTime.toLocaleTimeString('es-ES')}</span>
+              </div>
+              {currentLocation && (
+                <div className="flex items-center space-x-2 text-gray-700">
+                  <MapPin className="w-5 h-5" />
+                  <span>
+                    Lat: {currentLocation.latitude.toFixed(6)}, Long: {currentLocation.longitude.toFixed(6)}
+                  </span>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setIsLoggedIn(false);
+                  setPassword('');
+                }}
+                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Status Card */}
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Estado del Turno
+            </h2>
+            <div className="space-y-4">
+              <div className="flex items-start space-x-3">
+                <Calendar className="w-5 h-5 text-gray-500 mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Fecha</p>
+                  <p className="text-sm text-gray-600">
+                    {new Date().toLocaleDateString('es-ES', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
+              
+              {isWorking && timeEntry && (
+                <>
+                  <div className="flex items-start space-x-3">
+                    <Clock className="w-5 h-5 text-gray-500 mt-1" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
+                      <p className="text-sm text-gray-600">
+                        {new Date(timeEntry.start_time).toLocaleTimeString('es-ES')}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start space-x-3">
+                    <Timer className="w-5 h-5 text-gray-500 mt-1" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
+                      <p className="text-xl font-bold text-blue-600">
+                        {formatDuration(elapsedTime)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-3">
+                    <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
+                      <p className="text-sm text-gray-600">{timeEntry.workplace}</p>
+                    </div>
+                  </div>
+
+                  {currentLocation && (
+                    <div className="flex items-start space-x-3">
+                      <MapPin className="w-5 h-5 text-gray-500 mt-1" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
+                        <p className="text-sm text-gray-600">
+                          Lat: {currentLocation.latitude.toFixed(6)}<br />
+                          Long: {currentLocation.longitude.toFixed(6)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Action Card */}
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              {isWorking ? 'Finalizar Turno' : 'Iniciar Turno'}
+            </h2>
+            
+            {!isWorking ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Lugar de Trabajo
+                  </label>
+                  <select
+                    value={workplace}
+                    onChange={(e) => setWorkplace(e.target.value)}
+                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                  >
+                    {workspaces.map((workspace) => (
+                      <option key={workspace.id} value={workspace.name}>
+                        {workspace.name}
+                      </option>
+                    ))}
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+                
+                {workplace === 'Otro' && (
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ingrese el lugar de trabajo manualmente
+                    </label>
+                    <input
+                      type="text"
+                      value={customWorkplace}
+                      onChange={(e) => setCustomWorkplace(e.target.value)}
+                      placeholder="Ingrese el lugar de trabajo"
+                      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                    />
+                  </div>
+                )}
+                
+                <button
+                  onClick={handleStartWork}
+                  disabled={isProcessing}
+                  className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+                >
+                  <Clock className="w-5 h-5" />
+                  <span>{isProcessing ? 'Procesando...' : 'Iniciar Turno'}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 text-yellow-800">
+                    <MapPin className="w-5 h-5" />
+                    <span className="font-medium">Turno en progreso</span>
+                  </div>
+                  <p className="mt-1 text-sm text-yellow-700">
+                    Asegúrese de finalizar su turno antes de salir.
+                  </p>
+                </div>
+                
+                <button
+                  onClick={handleEndWork}
+                  disabled={isProcessing}
+                  className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+                >
+                  <Clock className="w-5 h-5" />
+                  <span>{isProcessing ? 'Procesando...' : 'Finalizar Turno'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Último Registro Pendiente */}
+        {lastEntry && !isWorking && (
+          <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Último Registro Pendiente
+            </h2>
+            <div className="space-y-4">
+              <div className="flex items-start space-x-3">
+                <Clock className="w-5 h-5 text-gray-500 mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
+                  <p className="text-sm text-gray-600">
+                    {new Date(lastEntry.start_time).toLocaleTimeString('es-ES')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
+                  <p className="text-sm text-gray-600">{lastEntry.workplace}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleEndWork}
+                disabled={isProcessing}
+                className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+              >
+                <Clock className="w-5 h-5" />
+                <span>{isProcessing ? 'Procesando...' : 'Finalizar Turno Pendiente'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tabela de Registros */}
+        {allEntries.length > 0 && (
+          <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Historial de Registros (Últimos 7)
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Fecha y Hora de Inicio
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Fecha y Hora de Finalización
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lugar de Trabajo
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Coordenadas
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {allEntries.map((entry) => (
+                    <tr key={entry.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(entry.start_time).toLocaleString('es-ES')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {entry.end_time ? new Date(entry.end_time).toLocaleString('es-ES') : 'En progreso'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {entry.workplace}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        Lat: {entry.start_latitude?.toFixed(6)}, Long: {entry.start_longitude?.toFixed(6)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
