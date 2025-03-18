@@ -20,7 +20,7 @@ function App() {
   const [timeEntry, setTimeEntry] = useState(null);
   const [isWorking, setIsWorking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false); // Novo estado para controlar o processamento
+  const [isProcessing, setIsProcessing] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -160,8 +160,8 @@ function App() {
       return;
     }
 
-    if (isProcessing) return; // Evitar múltiplos cliques
-    setIsProcessing(true); // Desabilitar o botão
+    if (isProcessing) return;
+    setIsProcessing(true);
 
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -195,12 +195,12 @@ function App() {
             console.error('Error al iniciar el turno:', error);
             toast.error('Error al registrar el inicio del turno');
           } finally {
-            setIsProcessing(false); // Reabilitar o botão
+            setIsProcessing(false);
           }
         },
         () => {
           toast.error('No se pudo obtener su ubicación');
-          setIsProcessing(false); // Reabilitar o botão em caso de erro
+          setIsProcessing(false);
         }
       );
     }
@@ -217,8 +217,8 @@ function App() {
       return;
     }
 
-    if (isProcessing) return; // Evitar múltiplos cliques
-    setIsProcessing(true); // Desabilitar o botão
+    if (isProcessing) return;
+    setIsProcessing(true);
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -252,13 +252,13 @@ function App() {
           console.error('Error al finalizar el turno:', error);
           toast.error('Error al registrar el fin del turno');
         } finally {
-          setIsProcessing(false); // Reabilitar o botão
+          setIsProcessing(false);
         }
       },
       (error) => {
         console.error('Error al obtener la ubicación:', error);
         toast.error('No se pudo obtener su ubicación');
-        setIsProcessing(false); // Reabilitar o botão em caso de erro
+        setIsProcessing(false);
       }
     );
   };
@@ -480,7 +480,7 @@ function App() {
                 
                 <button
                   onClick={handleStartWork}
-                  disabled={isProcessing} // Desabilitar o botão durante o processamento
+                  disabled={isProcessing}
                   className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
                 >
                   <Clock className="w-5 h-5" />
@@ -501,7 +501,7 @@ function App() {
                 
                 <button
                   onClick={handleEndWork}
-                  disabled={isProcessing} // Desabilitar o botão durante o processamento
+                  disabled={isProcessing}
                   className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
                 >
                   <Clock className="w-5 h-5" />
@@ -537,7 +537,7 @@ function App() {
               </div>
               <button
                 onClick={handleEndWork}
-                disabled={isProcessing} // Desabilitar o botão durante o processamento
+                disabled={isProcessing}
                 className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
               >
                 <Clock className="w-5 h-5" />
