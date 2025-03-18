@@ -20,6 +20,7 @@ function App() {
   const [timeEntry, setTimeEntry] = useState(null);
   const [isWorking, setIsWorking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Novo estado para controlar o processamento
   const [elapsedTime, setElapsedTime] = useState(0);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -159,6 +160,9 @@ function App() {
       return;
     }
 
+    if (isProcessing) return; // Evitar múltiplos cliques
+    setIsProcessing(true); // Desabilitar o botão
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
@@ -190,10 +194,13 @@ function App() {
           } catch (error) {
             console.error('Error al iniciar el turno:', error);
             toast.error('Error al registrar el inicio del turno');
+          } finally {
+            setIsProcessing(false); // Reabilitar o botão
           }
         },
         () => {
           toast.error('No se pudo obtener su ubicación');
+          setIsProcessing(false); // Reabilitar o botão em caso de erro
         }
       );
     }
@@ -209,6 +216,9 @@ function App() {
       toast.error('No se encontró ningún turno activo');
       return;
     }
+
+    if (isProcessing) return; // Evitar múltiplos cliques
+    setIsProcessing(true); // Desabilitar o botão
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -241,11 +251,14 @@ function App() {
         } catch (error) {
           console.error('Error al finalizar el turno:', error);
           toast.error('Error al registrar el fin del turno');
+        } finally {
+          setIsProcessing(false); // Reabilitar o botão
         }
       },
       (error) => {
         console.error('Error al obtener la ubicación:', error);
         toast.error('No se pudo obtener su ubicación');
+        setIsProcessing(false); // Reabilitar o botão em caso de erro
       }
     );
   };
@@ -467,10 +480,11 @@ function App() {
                 
                 <button
                   onClick={handleStartWork}
-                  className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium"
+                  disabled={isProcessing} // Desabilitar o botão durante o processamento
+                  className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
                 >
                   <Clock className="w-5 h-5" />
-                  <span>Iniciar Turno</span>
+                  <span>{isProcessing ? 'Procesando...' : 'Iniciar Turno'}</span>
                 </button>
               </div>
             ) : (
@@ -487,10 +501,11 @@ function App() {
                 
                 <button
                   onClick={handleEndWork}
-                  className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium"
+                  disabled={isProcessing} // Desabilitar o botão durante o processamento
+                  className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
                 >
                   <Clock className="w-5 h-5" />
-                  <span>Finalizar Turno</span>
+                  <span>{isProcessing ? 'Procesando...' : 'Finalizar Turno'}</span>
                 </button>
               </div>
             )}
@@ -522,10 +537,11 @@ function App() {
               </div>
               <button
                 onClick={handleEndWork}
-                className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium"
+                disabled={isProcessing} // Desabilitar o botão durante o processamento
+                className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
               >
                 <Clock className="w-5 h-5" />
-                <span>Finalizar Turno Pendiente</span>
+                <span>{isProcessing ? 'Procesando...' : 'Finalizar Turno Pendiente'}</span>
               </button>
             </div>
           </div>
