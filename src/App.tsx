@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer } from 'lucide-react';
+import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, ExternalLink } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
 
@@ -28,6 +28,12 @@ function App() {
   const [lastEntry, setLastEntry] = useState(null);
   const [allEntries, setAllEntries] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
+
+  // Lista de usuarios con acceso al dashboard de Power BI
+  const powerBIUsers = ['admin_ruta@sanpedrocargo.com', 'admin_oficinas@sanpedrocargo.com'];
+
+  // Verifica si el usuario actual tiene acceso al enlace de Power BI
+  const hasPowerBIAccess = powerBIUsers.includes(email);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -272,7 +278,7 @@ function App() {
             <Truck className="w-12 h-12 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-center mb-8 text-gray-800">
-            San Pedro Cargo
+            Sistema de Registro
           </h1>
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
@@ -331,7 +337,7 @@ function App() {
                   San Pedro Cargo
                 </h1>
                 <p className="text-sm text-gray-500">
-                  San Pedro Cargo
+                  Sistema de Registro
                 </p>
               </div>
             </div>
@@ -350,6 +356,22 @@ function App() {
                   <span>
                     Lat: {currentLocation.latitude.toFixed(6)}, Long: {currentLocation.longitude.toFixed(6)}
                   </span>
+                </div>
+              )}
+               {hasPowerBIAccess && (
+                <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  Dashboard Power BI
+                </h2>
+                  <iframe
+                    title="San Pedro Cargo - Admin"
+                    width="100%"
+                    height="600"
+                    src="https://app.powerbi.com/view?r=eyJrIjoiMmY1NjkzNmYtYjEyMy00MGY0LTk4MWYtYWE5NTY4Nzk1ZDBmIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9"
+                    frameBorder="0"
+                    allowFullScreen
+                    className="rounded-lg"
+                  ></iframe>
                 </div>
               )}
               <button
