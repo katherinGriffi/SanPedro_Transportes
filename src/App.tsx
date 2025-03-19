@@ -337,7 +337,7 @@ function App() {
                   Turismo San Pedro 
                 </h1>
                 <p className="text-sm text-gray-500">
-                  Sistema de Registro
+                   Turismo San Pedro 
                 </p>
               </div>
             </div>
