@@ -288,6 +288,25 @@ function App() {
     );
   };
 
+  const eventStyleGetter = (event) => {
+    let backgroundColor = '#3174ad'; // Azul por defecto
+    if (event.status === 'finalizado') {
+      backgroundColor = '#28a745'; // Verde
+    } else if (event.status === 'en progreso') {
+      backgroundColor = '#ffc107'; // Amarillo
+    } else {
+      backgroundColor = '#dc3545'; // Rojo
+    }
+    return {
+      style: {
+        backgroundColor,
+        borderRadius: '5px',
+        color: 'white',
+        border: 'none',
+      },
+    };
+  };
+
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center p-4">
@@ -647,6 +666,8 @@ function App() {
                 startAccessor="start"
                 endAccessor="end"
                 style={{ height: 500 }}
+                eventPropGetter={eventStyleGetter}
+
                 defaultView="month"
                 messages={{
                   today: 'Hoy',
