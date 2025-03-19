@@ -334,7 +334,7 @@ function App() {
               <Truck className="w-8 h-8 text-blue-800" />
               <div>
                 <h1 className="text-xl font-bold text-gray-900">
-                  San Pedro Cargo
+                  Turismo San Pedro 
                 </h1>
                 <p className="text-sm text-gray-500">
                   Sistema de Registro
