@@ -278,7 +278,7 @@ function App() {
             <Truck className="w-12 h-12 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-center mb-8 text-gray-800">
-            Sistema de Registro
+            Turismo San Pedro
           </h1>
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
