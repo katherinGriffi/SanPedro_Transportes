@@ -380,7 +380,7 @@ function App() {
             title="horas"
             width="100%"
             height="801"
-            src="https://app.powerbi.com/view?r=eyJrIjoiMmY1NjkzNmYtYjEyMy00MGY0LTk4MWYtYWE5NTY4Nzk1ZDBmIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9"
+            src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9"
             frameBorder="0"
             allowFullScreen
             className="rounded-lg"
