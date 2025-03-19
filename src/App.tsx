@@ -135,6 +135,8 @@ function App() {
     }
   };
 
+  
+
   const fetchAllEntries = async () => {
     try {
       const { data, error } = await supabase
@@ -305,6 +307,15 @@ function App() {
         border: 'none',
       },
     };
+  };
+
+  const generateCalendarEvents = () => {
+    return allEntries.map(entry => ({
+      title: entry.workplace,
+      start: new Date(entry.start_time),
+      end: entry.end_time ? new Date(entry.end_time) : new Date(),
+      status: entry.end_time ? 'finalizado' : 'en progreso',
+    }));
   };
 
   if (!isLoggedIn) {
@@ -662,7 +673,7 @@ function App() {
               </h2>
               <BigCalendar
                 localizer={localizer}
-                events={calendarEvents}
+                events={generateCalendarEvents()}
                 startAccessor="start"
                 endAccessor="end"
                 style={{ height: 500 }}
