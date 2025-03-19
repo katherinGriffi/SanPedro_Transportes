@@ -621,7 +621,7 @@ function App() {
           <div className="mt-8 grid gap-6 md:grid-cols-2">
             {/* Tabela de Registros */}
             {allEntries.length > 0 && (
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100" style={{ height: '400px' }}>
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"> 
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">
                   Historial de Registros (Últimos 7)
                 </h2>
@@ -677,8 +677,7 @@ function App() {
                   events={generateCalendarEvents()}
                   startAccessor="start"
                   endAccessor="end"
-                  style={{ height: 400 }}
-                  className="md:h-[600px]"
+                  style={{ height: 500 }}
                   eventPropGetter={eventStyleGetter}
                   defaultView="month"
                   messages={{
