@@ -385,7 +385,7 @@ function App() {
                   Turismo San Pedro 
                 </h1>
                 <p className="text-sm text-gray-500">
-                   Turismo San Pedro 
+                   Sistema de Registro 
                 </p>
               </div>
             </div>
@@ -606,10 +606,31 @@ function App() {
               />
             </div>
           </div>
-        </main>
-      )}
-    </div>
-  );
+        
+          {/* Legenda das Cores */}
+          <div className="mt-6 flex flex-wrap gap-4">
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-[#3174ad] rounded-sm"></div>
+              <span className="text-sm text-gray-700">Evento Padrão</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-[#28a745] rounded-sm"></div>
+              <span className="text-sm text-gray-700">Turno Finalizado</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
+              <span className="text-sm text-gray-700">Turno en Progreso</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-[#dc3545] rounded-sm"></div>
+              <span className="text-sm text-gray-700">Error o Desconocido</span>
+              </div>
+          </div>
+        
+      </main>
+    )}
+  </div>
+);
 }
 
 export default App;
