@@ -83,7 +83,7 @@ function App() {
   useEffect(() => {
     if (allEntries.length > 0) {
       const events = allEntries.map(entry => ({
-        title: 'Asistencia',
+        title: 'Trabalho',
         start: new Date(entry.start_time),
         end: entry.end_time ? new Date(entry.end_time) : new Date(),
         allDay: false,
