@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Clock, MapPin, LogIn, LogOut, Calendar as CalendarIcon, User, MapPinned, Timer } from 'lucide-react';
+import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
-import { Calendar, momentLocalizer } from 'react-big-calendar';
+import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import 'moment/locale/es';
 
-moment.locale('es');
+// Configuração do moment para o calendário
 const localizer = momentLocalizer(moment);
 
 function formatDuration(milliseconds) {
@@ -35,8 +34,12 @@ function App() {
   const [lastEntry, setLastEntry] = useState(null);
   const [allEntries, setAllEntries] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
+  const [calendarEvents, setCalendarEvents] = useState([]);
 
+  // Lista de usuários que só visualizam o Power BI
   const powerBIUsers = ['admin_oficinas@sanpedrocargo.com', 'admin_ruta@sanpedrocargo.com'];
+
+  // Verifica se o usuário atual é um dos usuários específicos
   const isPowerBIUser = powerBIUsers.includes(email);
 
   useEffect(() => {
@@ -76,6 +79,18 @@ function App() {
       fetchWorkspaces();
     }
   }, [isLoggedIn, userId]);
+
+  useEffect(() => {
+    if (allEntries.length > 0) {
+      const events = allEntries.map(entry => ({
+        title: 'Asistencia',
+        start: new Date(entry.start_time),
+        end: entry.end_time ? new Date(entry.end_time) : new Date(),
+        allDay: false,
+      }));
+      setCalendarEvents(events);
+    }
+  }, [allEntries]);
 
   const fetchWorkspaces = async () => {
     try {
@@ -273,34 +288,6 @@ function App() {
     );
   };
 
-  const generateCalendarEvents = () => {
-    return allEntries.map(entry => ({
-      title: entry.workplace,
-      start: new Date(entry.start_time),
-      end: entry.end_time ? new Date(entry.end_time) : new Date(),
-      status: entry.end_time ? 'finalizado' : 'en progreso',
-    }));
-  };
-
-  const eventStyleGetter = (event) => {
-    let backgroundColor = '#3174ad'; // Azul por defecto
-    if (event.status === 'finalizado') {
-      backgroundColor = '#28a745'; // Verde
-    } else if (event.status === 'en progreso') {
-      backgroundColor = '#ffc107'; // Amarillo
-    } else {
-      backgroundColor = '#dc3545'; // Rojo
-    }
-    return {
-      style: {
-        backgroundColor,
-        borderRadius: '5px',
-        color: 'white',
-        border: 'none',
-      },
-    };
-  };
-
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center p-4">
@@ -422,33 +409,6 @@ function App() {
         // Exibe o conteúdo normal para outros usuários
         <main className="max-w-7xl mx-auto px-4 py-8">
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Calendário */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Calendario de Trabajo
-              </h2>
-              <Calendar
-                localizer={localizer}
-                events={generateCalendarEvents()}
-                startAccessor="start"
-                endAccessor="end"
-                style={{ height: 500 }}
-                eventPropGetter={eventStyleGetter}
-                messages={{
-                  today: 'Hoy',
-                  previous: 'Anterior',
-                  next: 'Siguiente',
-                  month: 'Mes',
-                  week: 'Semana',
-                  day: 'Día',
-                  agenda: 'Agenda',
-                  date: 'Fecha',
-                  time: 'Hora',
-                  event: 'Evento',
-                }}
-              />
-            </div>
-
             {/* Status Card */}
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -456,7 +416,7 @@ function App() {
               </h2>
               <div className="space-y-4">
                 <div className="flex items-start space-x-3">
-                  <CalendarIcon className="w-5 h-5 text-gray-500 mt-1" />
+                  <Calendar className="w-5 h-5 text-gray-500 mt-1" />
                   <div>
                     <p className="text-sm font-medium text-gray-700">Fecha</p>
                     <p className="text-sm text-gray-600">
@@ -627,52 +587,78 @@ function App() {
             </div>
           )}
 
-          {/* Tabela de Registros */}
-          {allEntries.length > 0 && (
-            <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Historial de Registros (Últimos 7)
-              </h2>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Fecha y Hora de Inicio
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Fecha y Hora de Finalización
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Lugar de Trabajo
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Coordenadas
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {allEntries.map((entry) => (
-                      <tr key={entry.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(entry.start_time).toLocaleString('es-ES')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {entry.end_time ? new Date(entry.end_time).toLocaleString('es-ES') : 'En progreso'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {entry.workplace}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          Lat: {entry.start_latitude?.toFixed(6)}, Long: {entry.start_longitude?.toFixed(6)}
-                        </td>
+          {/* Tabela de Registros e Calendário */}
+          <div className="mt-8 grid gap-6 md:grid-cols-2">
+            {/* Tabela de Registros */}
+            {allEntries.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  Historial de Registros (Últimos 7)
+                </h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Fecha y Hora de Inicio
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Fecha y Hora de Finalización
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Lugar de Trabajo
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Coordenadas
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {allEntries.map((entry) => (
+                        <tr key={entry.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {new Date(entry.start_time).toLocaleString('es-ES')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {entry.end_time ? new Date(entry.end_time).toLocaleString('es-ES') : 'En progreso'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {entry.workplace}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            Lat: {entry.start_latitude?.toFixed(6)}, Long: {entry.start_longitude?.toFixed(6)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+            )}
+
+            {/* Calendário */}
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                Calendario de Trabajo
+              </h2>
+              <BigCalendar
+                localizer={localizer}
+                events={calendarEvents}
+                startAccessor="start"
+                endAccessor="end"
+                style={{ height: 500 }}
+                defaultView="month"
+                messages={{
+                  today: 'Hoy',
+                  previous: 'Anterior',
+                  next: 'Siguiente',
+                  month: 'Mes',
+                  week: 'Semana',
+                  day: 'Día',
+                }}
+              />
             </div>
-          )}
+          </div>
         </main>
       )}
     </div>
