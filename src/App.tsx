@@ -586,6 +586,21 @@ function App() {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Calendario de Trabajo
             </h2>
+
+            {/* Legenda das Cores */}
+            <div className="mb-6 flex flex-wrap gap-4"> {/* Adicionei mb-6 para margem abaixo da legenda */}
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-green-500 rounded-sm"></div> {/* Alterado para verde */}
+                <span className="text-sm text-gray-950">Turno Finalizado</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
+                <span className="text-sm text-gray-950">Turno en Progreso</span>
+              </div>
+            </div>  
+
+
+            {/* Calendário */}
             <div className="overflow-x-auto">
               <BigCalendar
                 localizer={localizer}
@@ -607,19 +622,9 @@ function App() {
             </div>
           </div>
         
-          {/* Legenda das Cores */}
-          <div className="mt-6 flex flex-wrap gap-4">
+          
             
-            <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-green-500 rounded-sm"></div> {/* Alterado para verde */}
-              <span className="text-sm text-gray-900">Turno Finalizado</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
-              <span className="text-sm text-gray-900">Turno en Progreso</span>
-            </div>
-            
-          </div>
+          
         
       </main>
     )}
