@@ -83,7 +83,7 @@ function App() {
   useEffect(() => {
     if (allEntries.length > 0) {
       const events = allEntries.map(entry => ({
-        title: 'Presente',
+        title: entry.workplace,
         start: new Date(entry.start_time),
         end: entry.end_time ? new Date(entry.end_time) : new Date(),
         allDay: false,
@@ -141,8 +141,7 @@ function App() {
         .from('time_entries')
         .select('*')
         .eq('user_id', userId)
-        .order('start_time', { ascending: false })
-        .limit(7);
+        .order('start_time', { ascending: false });
 
       if (error) throw error;
 
@@ -582,114 +581,29 @@ function App() {
             </div>
           </div>
 
-          {/* Último Registro Pendiente */}
-          {lastEntry && !isWorking && (
-            <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Último Registro Pendiente
-              </h2>
-              <div className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <Clock className="w-5 h-5 text-gray-500 mt-1" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
-                    <p className="text-sm text-gray-600">
-                      {new Date(lastEntry.start_time).toLocaleTimeString('es-ES')}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
-                    <p className="text-sm text-gray-600">{lastEntry.workplace}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleEndWork}
-                  disabled={isProcessing}
-                  className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
-                >
-                  <Clock className="w-5 h-5" />
-                  <span>{isProcessing ? 'Procesando...' : 'Finalizar Turno Pendiente'}</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Tabela de Registros e Calendário */}
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
-            {/* Tabela de Registros */}
-            {allEntries.length > 0 && (
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                  Historial de Registros (Últimos 7)
-                </h2>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Fecha y Hora de Inicio
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Fecha y Hora de Finalización
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Lugar de Trabajo
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Coordenadas
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {allEntries.map((entry) => (
-                        <tr key={entry.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(entry.start_time).toLocaleString('es-ES')}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {entry.end_time ? new Date(entry.end_time).toLocaleString('es-ES') : 'En progreso'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {entry.workplace}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            Lat: {entry.start_latitude?.toFixed(6)}, Long: {entry.start_longitude?.toFixed(6)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* Calendário */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Calendario de Trabajo
-              </h2>
-              <div className="overflow-x-auto">
-                <BigCalendar
-                  localizer={localizer}
-                  events={generateCalendarEvents()}
-                  startAccessor="start"
-                  endAccessor="end"
-                  style={{ height: 500 }}
-                  eventPropGetter={eventStyleGetter}
-                  defaultView="month"
-                  messages={{
-                    today: 'Hoy',
-                    previous: 'Anterior',
-                    next: 'Siguiente',
-                    month: 'Mes',
-                    week: 'Semana',
-                    day: 'Día',
-                  }}
-                />
-              </div>
+          {/* Calendário */}
+          <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Calendario de Trabajo
+            </h2>
+            <div className="overflow-x-auto">
+              <BigCalendar
+                localizer={localizer}
+                events={generateCalendarEvents()}
+                startAccessor="start"
+                endAccessor="end"
+                style={{ height: 500 }}
+                eventPropGetter={eventStyleGetter}
+                defaultView="month"
+                messages={{
+                  today: 'Hoy',
+                  previous: 'Anterior',
+                  next: 'Siguiente',
+                  month: 'Mes',
+                  week: 'Semana',
+                  day: 'Día',
+                }}
+              />
             </div>
           </div>
         </main>
