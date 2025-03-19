@@ -83,7 +83,7 @@ function App() {
   useEffect(() => {
     if (allEntries.length > 0) {
       const events = allEntries.map(entry => ({
-        title: 'Trabalho',
+        title: 'Presente',
         start: new Date(entry.start_time),
         end: entry.end_time ? new Date(entry.end_time) : new Date(),
         allDay: false,
@@ -134,8 +134,6 @@ function App() {
       console.error('Error al buscar último registro pendiente:', error);
     }
   };
-
-  
 
   const fetchAllEntries = async () => {
     try {
@@ -302,9 +300,11 @@ function App() {
     return {
       style: {
         backgroundColor,
-        borderRadius: '5px',
+        borderRadius: '4px',
         color: 'white',
         border: 'none',
+        padding: '2px 8px',
+        fontSize: '14px',
       },
     };
   };
@@ -671,24 +671,25 @@ function App() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Calendario de Trabajo
               </h2>
-              <BigCalendar
-                localizer={localizer}
-                events={generateCalendarEvents()}
-                startAccessor="start"
-                endAccessor="end"
-                style={{ height: 500 }}
-                eventPropGetter={eventStyleGetter}
-
-                defaultView="month"
-                messages={{
-                  today: 'Hoy',
-                  previous: 'Anterior',
-                  next: 'Siguiente',
-                  month: 'Mes',
-                  week: 'Semana',
-                  day: 'Día',
-                }}
-              />
+              <div className="overflow-x-auto">
+                <BigCalendar
+                  localizer={localizer}
+                  events={generateCalendarEvents()}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height: 500 }}
+                  eventPropGetter={eventStyleGetter}
+                  defaultView="month"
+                  messages={{
+                    today: 'Hoy',
+                    previous: 'Anterior',
+                    next: 'Siguiente',
+                    month: 'Mes',
+                    week: 'Semana',
+                    day: 'Día',
+                  }}
+                />
+              </div>
             </div>
           </div>
         </main>
