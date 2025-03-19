@@ -434,29 +434,30 @@ function App() {
       ) : (
         // Exibe o conteúdo normal para outros usuários
         <main className="max-w-7xl mx-auto px-4 py-8">
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
             {/* Calendário */}
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Calendario de Trabajo
               </h2>
-              <BigCalendar
-                localizer={localizer}
-                events={calendarEvents}
-                startAccessor="start"
-                endAccessor="end"
-                style={{ height: 500 }}
-                defaultView="month"
-                eventPropGetter={eventStyleGetter} // Aplica estilos personalizados aos eventos
-                messages={{
-                  today: 'Hoy',
-                  previous: 'Anterior',
-                  next: 'Siguiente',
-                  month: 'Mes',
-                  week: 'Semana',
-                  day: 'Día',
-                }}
-              />
+              <div style={{ height: '400px' }}>
+                <BigCalendar
+                  localizer={localizer}
+                  events={calendarEvents}
+                  startAccessor="start"
+                  endAccessor="end"
+                  defaultView="month"
+                  eventPropGetter={eventStyleGetter} // Aplica estilos personalizados aos eventos
+                  messages={{
+                    today: 'Hoy',
+                    previous: 'Anterior',
+                    next: 'Siguiente',
+                    month: 'Mes',
+                    week: 'Semana',
+                    day: 'Día',
+                  }}
+                />
+              </div>
             </div>
 
             {/* Tabela de Registros */}
