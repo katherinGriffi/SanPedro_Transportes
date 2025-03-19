@@ -379,7 +379,7 @@ function App() {
           <iframe
             title="horas"
             width="100%"
-            height="800"
+            height="801"
             src="https://app.powerbi.com/view?r=eyJrIjoiMmY1NjkzNmYtYjEyMy00MGY0LTk4MWYtYWE5NTY4Nzk1ZDBmIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9"
             frameBorder="0"
             allowFullScreen
