@@ -6,7 +6,7 @@ import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-// Configuração do moment para o calendário
+// Configuración del moment para el calendário
 const localizer = momentLocalizer(moment);
 
 function formatDuration(milliseconds) {
@@ -35,11 +35,14 @@ function App() {
   const [allEntries, setAllEntries] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
 
-  // Lista de usuários que só visualizam o Power BI
+  // Lista de usuarios que solo visualizan el Power BI
   const powerBIUsers = ['admin_oficinas@sanpedrocargo.com', 'admin_ruta@sanpedrocargo.com'];
 
-  // Verifica se o usuário atual é um dos usuários específicos
+  // Verifica si el usuario actual es uno de los usuarios específicos
   const isPowerBIUser = powerBIUsers.includes(email);
 
   useEffect(() => {
@@ -173,6 +176,26 @@ function App() {
       toast.success('Inicio de sesión exitoso!');
     } catch (error) {
       toast.error('Error al iniciar sesión. Inténtelo de nuevo.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: 'https://katheringriffi.github.io/SanPedro_Transportes/update-password',
+      });
+
+      if (error) throw error;
+
+      setResetSent(true);
+      toast.success('Se ha enviado un enlace de recuperación a tu correo');
+    } catch (error) {
+      toast.error(error.message || 'Error al enviar el email de recuperación');
     } finally {
       setIsLoading(false);
     }
@@ -328,43 +351,96 @@ function App() {
           <h1 className="text-2xl font-bold text-center mb-8 text-gray-800">
             Turismo San Pedro
           </h1>
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
-              <input
-                type="text"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email"
-                required
+          
+          {showForgotPassword ? (
+            <form onSubmit={handleForgotPassword} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Email de recuperación
+                </label>
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  placeholder="Ingresa tu email"
+                  required
+                  disabled={isLoading}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                />
+              </div>
+              
+              <button
+                type="submit"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
                 disabled={isLoading}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Contraseña
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
-                required
+              >
+                {isLoading ? 'Enviando...' : 'Enviar enlace de recuperación'}
+              </button>
+              
+              {resetSent && (
+                <div className="text-center text-sm text-green-600">
+                  Se ha enviado un enlace a tu correo. Revisa tu bandeja de entrada.
+                </div>
+              )}
+              
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setResetSent(false);
+                }}
+                className="w-full text-center text-sm text-blue-600 hover:text-blue-800"
+              >
+                Volver al inicio de sesión
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Email
+                </label>
+                <input
+                  type="text"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email"
+                  required
+                  disabled={isLoading}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Contraseña
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
                 disabled={isLoading}
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              disabled={isLoading}
-            >
-              <LogIn className="w-5 h-5 mr-2" />
-              {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
-            </button>
-          </form>
+              >
+                <LogIn className="w-5 h-5 mr-2" />
+                {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="w-full text-center text-sm text-blue-600 hover:text-blue-800"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -435,7 +511,7 @@ function App() {
           ></iframe>
         </div>
       ) : (
-        // Exibe o conteúdo normal para outros usuários
+        // Exibe el contenido normal para otros usuarios
         <main className="max-w-7xl mx-auto px-4 py-8">
           <div className="grid gap-6 md:grid-cols-2">
             {/* Status Card */}
@@ -588,9 +664,9 @@ function App() {
             </h2>
 
             {/* Legenda das Cores */}
-            <div className="mb-6 flex flex-wrap gap-4"> {/* Adicionei mb-6 para margem abaixo da legenda */}
+            <div className="mb-6 flex flex-wrap gap-4">
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-green-500 rounded-sm"></div> {/* Alterado para verde */}
+                <div className="w-4 h-4 bg-green-500 rounded-sm"></div>
                 <span className="text-sm text-gray-950">Turno Finalizado</span>
               </div>
               <div className="flex items-center space-x-2">
@@ -598,7 +674,6 @@ function App() {
                 <span className="text-sm text-gray-950">Turno en Progreso</span>
               </div>
             </div>  
-
 
             {/* Calendário */}
             <div className="overflow-x-auto">
@@ -621,15 +696,10 @@ function App() {
               />
             </div>
           </div>
-        
-          
-            
-          
-        
-      </main>
-    )}
-  </div>
-);
+        </main>
+      )}
+    </div>
+  );
 }
 
 export default App;
