@@ -1,12 +1,9 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  optimizeDeps: {
-    exclude: ['lucide-react'],
-  },
-base: '/SanPedro_Transportes/'
-
-});
+  css: {
+    postcss: './postcss.config.cjs' // Atualize para o nome correto
+  }
+})

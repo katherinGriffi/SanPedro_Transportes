@@ -7,7 +7,7 @@ import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-// Configuración de moment para el calendario
+// Configuração de moment para o calendário
 const localizer = momentLocalizer(moment);
 moment.locale('es', {
   months: 'Enero_Febrero_Marzo_Abril_Mayo_Junio_Julio_Agosto_Septiembre_Octubre_Noviembre_Diciembre'.split('_'),
@@ -26,31 +26,54 @@ function ActualizarContraseña() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sessionVerified, setSessionVerified] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash.includes('access_token')) {
-      const params = new URLSearchParams(hash.substring(1));
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-      
-      supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      }).then(({ error }) => {
+    const verifySession = async () => {
+      const hash = window.location.hash;
+      if (hash.includes('access_token')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+        
         if (error) {
           toast.error('Enlace de recuperación inválido o expirado');
           navigate('/');
+          return;
         }
-      });
-    } else {
-      navigate('/');
-    }
+        
+        // Verificar que el usuario está autenticado
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        if (userError || !user) {
+          toast.error('No se pudo verificar el usuario');
+          navigate('/');
+          return;
+        }
+        
+        setSessionVerified(true);
+      } else {
+        toast.error('Enlace de recuperación inválido');
+        navigate('/');
+      }
+    };
+
+    verifySession();
   }, [navigate]);
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
+    
+    if (!sessionVerified) {
+      toast.error('Sesión no verificada');
+      return;
+    }
     
     if (password !== confirmPassword) {
       toast.error('Las contraseñas no coinciden');
@@ -72,6 +95,10 @@ function ActualizarContraseña() {
       if (error) throw error;
       
       toast.success('¡Contraseña actualizada con éxito!');
+      
+      // Cerrar sesión después de actualizar la contraseña
+      await supabase.auth.signOut();
+      
       setTimeout(() => navigate('/'), 2000);
     } catch (error) {
       toast.error(error.message || 'Error al actualizar la contraseña');
@@ -79,6 +106,17 @@ function ActualizarContraseña() {
       setLoading(false);
     }
   };
+
+  if (!sessionVerified) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-700">Verificando sesión...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center p-4">
