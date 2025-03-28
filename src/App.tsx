@@ -7,7 +7,7 @@ import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-// Configuração de moment para o calendário
+// Configuración de moment para el calendario
 const localizer = momentLocalizer(moment);
 moment.locale('es', {
   months: 'Enero_Febrero_Marzo_Abril_Mayo_Junio_Julio_Agosto_Septiembre_Octubre_Noviembre_Diciembre'.split('_'),
@@ -244,14 +244,14 @@ function IniciarSesion() {
         <div className="flex items-center justify-center mb-8">
           <Truck className="w-12 h-12 text-blue-600" />
         </div>
-        <h1 className="text-2xl font-bold text-center mb-8 text-gray-800">
+        <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">
           Transportes San Pedro
         </h1>
         
         {showForgotPassword ? (
-          <form onSubmit={handleForgotPassword} className="space-y-6">
+          <form onSubmit={handleForgotPassword} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Email de recuperación
               </label>
               <input
@@ -274,26 +274,28 @@ function IniciarSesion() {
             </button>
             
             {resetSent && (
-              <div className="text-center text-sm text-green-600">
+              <div className="text-center text-sm text-green-600 mt-2">
                 Se ha enviado un enlace a tu correo. Revisa tu bandeja de entrada.
               </div>
             )}
             
-            <button
-              type="button"
-              onClick={() => {
-                setShowForgotPassword(false);
-                setResetSent(false);
-              }}
-              className="w-full text-center text-sm text-blue-600 hover:text-blue-800"
-            >
-              Volver al inicio de sesión
-            </button>
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setResetSent(false);
+                }}
+                className="text-blue-600 hover:text-blue-800 text-sm underline"
+              >
+                Volver al inicio de sesión
+              </button>
+            </div>
           </form>
         ) : (
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Email
               </label>
               <input
@@ -307,7 +309,7 @@ function IniciarSesion() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Contraseña
               </label>
               <input
@@ -328,20 +330,21 @@ function IniciarSesion() {
               {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
             
-            <button
-              type="button"
-              onClick={() => setShowForgotPassword(true)}
-              className="w-full text-center text-sm text-blue-600 hover:text-blue-800"
-            >
-              ¿Olvidaste tu contraseña?
-            </button>
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-blue-600 hover:text-blue-800 text-sm underline"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </div>
           </form>
         )}
       </div>
     </div>
   );
 }
-
 function AppPrincipal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
