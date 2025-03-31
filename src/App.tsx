@@ -196,9 +196,9 @@ function IniciarSesion() {
   const navigate = useNavigate();
 // eliminar 
 
-  useEffect(() => {
-    alert(`Entorno: ${import.meta.env.MODE}\nMostrar enlace: ${!showForgotPassword}`);
-  }, [showForgotPassword]);
+useEffect(() => {
+  console.log("Entorno:", import.meta.env.MODE, "Mostrar enlace:", !showForgotPassword);
+}, [showForgotPassword]);
 //
 
   const handleLogin = async (e) => {
