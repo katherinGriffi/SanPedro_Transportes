@@ -345,42 +345,6 @@ function IniciarSesion() {
     </div>
   );
 }
-function AppPrincipal() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsLoggedIn(!!session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setIsLoggedIn(!!session);
-    });
-
-    return () => {
-      clearInterval(timer);
-      subscription?.unsubscribe();
-    };
-  }, []);
-
-  if (!isLoggedIn) {
-    return <IniciarSesion />;
-  }
-
-  return (
-    <Router basename="/SanPedro_Transportes">
-      <Routes>
-        <Route path="/" element={<PaginaPrincipal />} />
-        <Route path="/actualizar-contrasena" element={<ActualizarContraseña />} />
-      </Routes>
-    </Router>
-  );
-}
 
 function PaginaPrincipal() {
   const [lugarTrabajo, setLugarTrabajo] = useState('');
@@ -882,4 +846,29 @@ function PaginaPrincipal() {
   );
 }
 
-export default AppPrincipal;
+function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setIsLoggedIn(!!session);
+    });
+
+    return () => subscription?.unsubscribe();
+  }, []);
+
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={isLoggedIn ? <PaginaPrincipal /> : <IniciarSesion />} />
+        <Route path="/actualizar-contrasena" element={<ActualizarContraseña />} />
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;
