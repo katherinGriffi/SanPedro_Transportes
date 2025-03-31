@@ -33,19 +33,24 @@ function IniciarSesion() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
+    console.log('Iniciando processo de login...'); // Log inicial
 
     try {
       // 1. Autenticação básica
+      console.log('Tentando autenticar com Supabase...'); // Log antes da chamada
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
+      console.log('Resposta do Supabase:', { user, authError }); // Log da resposta
 
       if (authError || !user) {
+        console.error('Erro de autenticação:', authError); // Log detalhado do erro
         throw authError || new Error('Credenciales inválidas');
       }
 
       // 2. Verificar status na tabela users
+      console.log('Usuário autenticado, verificando status...'); // Log pós-autenticação
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('activo')
@@ -58,13 +63,16 @@ function IniciarSesion() {
 
       // 3. Validar si está activo
       if (userData.activo !== true) {
+        console.log('Usuário não ativo, fazendo logout...'); // Log para usuário inativo
         await supabase.auth.signOut();
         throw new Error('Tu cuenta no está activa. Contacta al administrador.');
       }
+      console.log('Autenticação completa, redirecionando...'); // Log final
 
       // 4. Redirigir si todo está correcto
       navigate('/');
     } catch (error) {
+      console.error('Erro completo no login:', error); // Log detalhado
       toast.error(error.message);
     } finally {
       setIsLoading(false);
