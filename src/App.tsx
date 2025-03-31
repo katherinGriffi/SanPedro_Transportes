@@ -236,6 +236,8 @@ function IniciarSesion() {
       setIsLoading(false);
     }
   };
+  console.log("Renderizando IniciarSesion. showForgotPassword:", showForgotPassword);
+
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center p-4">
@@ -856,6 +858,7 @@ function App() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Cambio de estado de sesión:", event, "Sesión:", !!session);
       setIsLoggedIn(!!session);
     });
 
