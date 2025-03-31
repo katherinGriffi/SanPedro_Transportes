@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, useNavigate, Link } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, FileText, Upload, Download } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import toast, { Toaster } from 'react-hot-toast';
@@ -33,7 +33,6 @@ function IniciarSesion() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    console.log('Iniciando processo de login...');
 
     try {
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
@@ -62,7 +61,6 @@ function IniciarSesion() {
 
       navigate('/');
     } catch (error) {
-      console.error('Erro completo no login:', error);
       toast.error(error.message);
     } finally {
       setIsLoading(false);
@@ -133,7 +131,6 @@ function GestionBoletas() {
   const [boletasExistentes, setBoletasExistentes] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Obtener lista de usuarios
   useEffect(() => {
     const cargarUsuarios = async () => {
       setIsLoading(true);
@@ -146,13 +143,13 @@ function GestionBoletas() {
 
         if (error) throw error;
 
-        setUsuarios(data);
-        if (data.length > 0) {
+        if (data && data.length > 0) {
+          setUsuarios(data);
           setUsuarioSeleccionado(data[0].id);
         }
       } catch (error) {
         console.error('Error cargando usuarios:', error);
-        toast.error('Error al cargar usuarios');
+        toast.error('Error al cargar usuarios: ' + error.message);
       } finally {
         setIsLoading(false);
       }
@@ -161,7 +158,6 @@ function GestionBoletas() {
     cargarUsuarios();
   }, []);
 
-  // Cargar boletas existentes
   useEffect(() => {
     if (usuarioSeleccionado) {
       cargarBoletasUsuario();
@@ -181,12 +177,14 @@ function GestionBoletas() {
       setBoletasExistentes(data || []);
     } catch (error) {
       console.error('Error cargando boletas:', error);
-      toast.error('Error al cargar boletas existentes');
+      toast.error('Error al cargar boletas: ' + error.message);
     }
   };
 
   const handleFileChange = (e) => {
-    setArchivo(e.target.files[0]);
+    if (e.target.files && e.target.files[0]) {
+      setArchivo(e.target.files[0]);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -200,7 +198,6 @@ function GestionBoletas() {
     setIsUploading(true);
 
     try {
-      // 1. Subir el archivo al storage
       const fileExt = archivo.name.split('.').pop();
       const fileName = `${usuarioSeleccionado}_${ano}_${mes}.${fileExt}`;
       const filePath = `${fileName}`;
@@ -209,30 +206,39 @@ function GestionBoletas() {
         .from('boletas')
         .upload(filePath, archivo);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        if (uploadError.message.includes('already exists')) {
+          const { error: updateError } = await supabase.storage
+            .from('boletas')
+            .update(filePath, archivo);
+          
+          if (updateError) throw updateError;
+        } else {
+          throw uploadError;
+        }
+      }
 
-      // 2. Obtener la URL pública del archivo
       const { data: { publicUrl } } = supabase.storage
         .from('boletas')
         .getPublicUrl(filePath);
 
-      // 3. Guardar registro en la tabla boletas_pagos
       const { error: insertError } = await supabase
         .from('boletas_pagos')
-        .insert([
+        .upsert(
           {
             user_id: usuarioSeleccionado,
             arquivo_url: publicUrl,
             ano: ano,
             mes: mes
-          }
-        ]);
+          },
+          { onConflict: ['user_id', 'ano', 'mes'] }
+        );
 
       if (insertError) throw insertError;
 
       toast.success('Boleta subida correctamente');
       setArchivo(null);
-      cargarBoletasUsuario();
+      await cargarBoletasUsuario();
     } catch (error) {
       console.error('Error subiendo boleta:', error);
       toast.error('Error al subir la boleta: ' + error.message);
@@ -249,17 +255,16 @@ function GestionBoletas() {
     if (!window.confirm('¿Estás seguro de eliminar esta boleta?')) return;
 
     try {
-      // Extraer el path del archivo de la URL
-      const filePath = url.split('/public/boletas/')[1];
+      const filePath = url.split('/storage/v1/object/public/boletas/')[1];
       
-      // 1. Eliminar de storage
       const { error: deleteError } = await supabase.storage
         .from('boletas')
         .remove([filePath]);
 
-      if (deleteError) throw deleteError;
+      if (deleteError && !deleteError.message.includes('not found')) {
+        throw deleteError;
+      }
 
-      // 2. Eliminar registro de la tabla
       const { error: deleteRecordError } = await supabase
         .from('boletas_pagos')
         .delete()
@@ -268,10 +273,10 @@ function GestionBoletas() {
       if (deleteRecordError) throw deleteRecordError;
 
       toast.success('Boleta eliminada correctamente');
-      cargarBoletasUsuario();
+      await cargarBoletasUsuario();
     } catch (error) {
       console.error('Error eliminando boleta:', error);
-      toast.error('Error al eliminar la boleta');
+      toast.error('Error al eliminar la boleta: ' + error.message);
     }
   };
 
@@ -308,7 +313,7 @@ function GestionBoletas() {
             <input
               type="number"
               value={ano}
-              onChange={(e) => setAno(parseInt(e.target.value))}
+              onChange={(e) => setAno(Number(e.target.value))}
               min="2000"
               max="2100"
               className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
@@ -321,7 +326,7 @@ function GestionBoletas() {
             </label>
             <select
               value={mes}
-              onChange={(e) => setMes(parseInt(e.target.value))}
+              onChange={(e) => setMes(Number(e.target.value))}
               className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
             >
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
@@ -335,7 +340,7 @@ function GestionBoletas() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Archivo de Boleta
+            Archivo de Boleta (PDF, JPG, PNG)
           </label>
           <input
             type="file"
@@ -346,7 +351,8 @@ function GestionBoletas() {
               file:text-sm file:font-semibold
               file:bg-blue-50 file:text-blue-700
               hover:file:bg-blue-100"
-            accept=".pdf,.jpg,.jpeg,.png,.svg"
+            accept=".pdf,.jpg,.jpeg,.png"
+            required
           />
         </div>
 
@@ -365,7 +371,9 @@ function GestionBoletas() {
           Boletas existentes para este usuario
         </h3>
         
-        {boletasExistentes.length === 0 ? (
+        {isLoading ? (
+          <p className="text-sm text-gray-500">Cargando...</p>
+        ) : boletasExistentes.length === 0 ? (
           <p className="text-sm text-gray-500">No hay boletas registradas para este usuario.</p>
         ) : (
           <div className="overflow-x-auto">
