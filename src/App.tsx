@@ -212,7 +212,7 @@ function IniciarSesion() {
 
       // 2. Verificar si el usuario está activo en la tabla de perfiles
       const { data: profile, error: profileError } = await supabase
-        .from('profiles') // Cambia esto por tu tabla de usuarios si es diferente
+        .from('users') // Cambia esto por tu tabla de usuarios si es diferente
         .select('activo')
         .eq('id', user.id)
         .single();
@@ -242,7 +242,7 @@ function IniciarSesion() {
     try {
       // Verificar primero si el usuario está activo
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('users')
         .select('activo')
         .eq('email', resetEmail)
         .single();
