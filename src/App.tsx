@@ -440,7 +440,7 @@ function PaginaPrincipal() {
   const [lugaresTrabajo, setLugaresTrabajo] = useState([]);
   const [eventosCalendario, setEventosCalendario] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [activeTab, setActiveTab] = useState('registro');
+  const [activeTab, setActiveTab] = useState('registro'); // Asegurar que empiece con 'registro'
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -499,11 +499,14 @@ function PaginaPrincipal() {
   }, []);
 
   const isAdminUser = () => {
+    if (!userEmail) return false;
+    
     const adminEmails = [
       'admin_oficinas@sanpedrocargo.com',
       'admin_ruta@sanpedrocargo.com'
-    ];
-    return adminEmails.includes(userEmail?.toLowerCase());
+    ].map(email => email.toLowerCase());
+  
+    return adminEmails.includes(userEmail.toLowerCase());
   };
 
   const buscarLugaresTrabajo = async () => {
@@ -702,49 +705,69 @@ function PaginaPrincipal() {
 
   // Contenido para usuarios admin
   // Contenido para usuarios admin - Versión Corregida
-const renderAdminContent = () => (
-  <>
-    <div className="flex border-b border-gray-200 mb-6">
-      <button
-        className={`py-2 px-4 font-medium text-sm ${activeTab === 'registro' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-        onClick={() => setActiveTab('registro')}
-      >
-        Registro de Tiempos
-      </button>
-      <button
-        className={`py-2 px-4 font-medium text-sm ${activeTab === 'boletas' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-        onClick={() => setActiveTab('boletas')}
-      >
-        Boletas de Pago
-      </button>
-      <button
-        className={`py-2 px-4 font-medium text-sm ${activeTab === 'dashboard' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-        onClick={() => setActiveTab('dashboard')}
-      >
-        Dashboard
-      </button>
-    </div>
+// Contenido para usuarios admin - Versión Corregida
+const renderAdminContent = () => {
+  // Verificación adicional de seguridad
+  if (!isAdminUser()) {
+    return renderNormalContent();
+  }
 
-    {activeTab === 'registro' && renderNormalContent()}
-    {activeTab === 'boletas' && <GestionBoletas />}
-    {activeTab === 'dashboard' && (
-      <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Dashboard de Horas Trabajadas
-        </h2>
-        <iframe 
-          title="horas" 
-          width="100%" 
-          height="801" 
-          src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
-          frameBorder="0" 
-          allowFullScreen 
-          className="rounded-lg"
-        ></iframe>
+  return (
+    <div className="space-y-6">
+      {/* Barra de pestañas */}
+      <div className="flex border-b border-gray-200">
+        <button
+          className={`py-3 px-6 font-medium text-sm flex items-center ${activeTab === 'registro' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('registro')}
+        >
+          <Clock className="w-4 h-4 mr-2" />
+          Registro
+        </button>
+        
+        <button
+          className={`py-3 px-6 font-medium text-sm flex items-center ${activeTab === 'boletas' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('boletas')}
+        >
+          <FileText className="w-4 h-4 mr-2" />
+          Boletas
+        </button>
+        
+        <button
+          className={`py-3 px-6 font-medium text-sm flex items-center ${activeTab === 'dashboard' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z"/>
+            <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z"/>
+          </svg>
+          Dashboard
+        </button>
       </div>
-    )}
-  </>
-)
+
+      {/* Contenido de las pestañas */}
+      <div className="min-h-[500px]">
+        {activeTab === 'registro' && renderNormalContent()}
+        {activeTab === 'boletas' && <GestionBoletas />}
+        {activeTab === 'dashboard' && (
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Dashboard de Horas Trabajadas
+            </h2>
+            <div className="aspect-w-16 aspect-h-9">
+              <iframe 
+                title="powerbi-dashboard"
+                className="w-full h-[700px] rounded-lg border"
+                src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
+                frameBorder="0"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
   ;
 
   // Contenido para usuarios normales
