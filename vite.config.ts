@@ -1,17 +1,28 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  base: '/SanPedro_Transportes/', // Asegúrate que coincida con tu repo
+  base: '/SanPedro_Transportes/',
   build: {
     outDir: 'dist',
-    emptyOutDir: true,
+    chunkSizeWarningLimit: 1000, // Aumenta el límite para warnings
     rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html') // Forza la inyección correcta
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          supabase: ['@supabase/supabase-js']
+        }
       }
+    }
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
     }
   }
 });
