@@ -503,7 +503,7 @@ function PaginaPrincipal() {
       'admin_oficinas@sanpedrocargo.com',
       'admin_ruta@sanpedrocargo.com'
     ];
-    return adminEmails.includes(userEmail);
+    return adminEmails.includes(userEmail?.toLowerCase());
   };
 
   const buscarLugaresTrabajo = async () => {
@@ -701,49 +701,51 @@ function PaginaPrincipal() {
   };
 
   // Contenido para usuarios admin
-  const renderAdminContent = () => (
-    <>
-      <div className="flex border-b border-gray-200 mb-6">
-        <button
-          className={`py-2 px-4 font-medium text-sm ${activeTab === 'registro' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-          onClick={() => setActiveTab('registro')}
-        >
-          Registro de Tiempos
-        </button>
-        <button
-          className={`py-2 px-4 font-medium text-sm ${activeTab === 'boletas' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-          onClick={() => setActiveTab('boletas')}
-        >
-          Boletas de Pago
-        </button>
-        <button
-          className={`py-2 px-4 font-medium text-sm ${activeTab === 'dashboard' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-          onClick={() => setActiveTab('dashboard')}
-        >
-          Dashboard
-        </button>
-      </div>
+  // Contenido para usuarios admin - Versión Corregida
+const renderAdminContent = () => (
+  <>
+    <div className="flex border-b border-gray-200 mb-6">
+      <button
+        className={`py-2 px-4 font-medium text-sm ${activeTab === 'registro' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+        onClick={() => setActiveTab('registro')}
+      >
+        Registro de Tiempos
+      </button>
+      <button
+        className={`py-2 px-4 font-medium text-sm ${activeTab === 'boletas' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+        onClick={() => setActiveTab('boletas')}
+      >
+        Boletas de Pago
+      </button>
+      <button
+        className={`py-2 px-4 font-medium text-sm ${activeTab === 'dashboard' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+        onClick={() => setActiveTab('dashboard')}
+      >
+        Dashboard
+      </button>
+    </div>
 
-      {activeTab === 'registro' && renderNormalContent()}
-      {activeTab === 'boletas' && <GestionBoletas />}
-      {activeTab === 'dashboard' && (
-        <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Dashboard de Horas Trabajadas
-          </h2>
-          <iframe 
-            title="horas" 
-            width="100%" 
-            height="801" 
-            src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
-            frameBorder="0" 
-            allowFullScreen 
-            className="rounded-lg"
-          ></iframe>
-        </div>
-      )}
-    </>
-  );
+    {activeTab === 'registro' && renderNormalContent()}
+    {activeTab === 'boletas' && <GestionBoletas />}
+    {activeTab === 'dashboard' && (
+      <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Dashboard de Horas Trabajadas
+        </h2>
+        <iframe 
+          title="horas" 
+          width="100%" 
+          height="801" 
+          src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
+          frameBorder="0" 
+          allowFullScreen 
+          className="rounded-lg"
+        ></iframe>
+      </div>
+    )}
+  </>
+)
+  ;
 
   // Contenido para usuarios normales
   const renderNormalContent = () => (
