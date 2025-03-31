@@ -334,7 +334,8 @@ function IniciarSesion() {
               <button
                 type="button"
                 onClick={() => setShowForgotPassword(true)}
-                className="text-blue-600 hover:text-blue-800 text-sm underline"
+                style={{ color: '#2563eb', textDecoration: 'underline' }} // Equivalente a text-blue-600 y underline
+                className="text-sm hover:text-blue-800"
               >
                 ¿Olvidaste tu contraseña?
               </button>
