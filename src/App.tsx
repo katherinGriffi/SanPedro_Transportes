@@ -7,13 +7,14 @@ import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-// Configuración de moment para el calendario
+// Configuração do calendário
 const localizer = momentLocalizer(moment);
 moment.locale('es', {
   months: 'Enero_Febrero_Marzo_Abril_Mayo_Junio_Julio_Agosto_Septiembre_Octubre_Noviembre_Diciembre'.split('_'),
   weekdays: 'Domingo_Lunes_Martes_Miércoles_Jueves_Viernes_Sábado'.split('_')
 });
 
+// Função para formatar duração
 function formatDuration(milliseconds) {
   const seconds = Math.floor(milliseconds / 1000);
   const hours = Math.floor(seconds / 3600);
@@ -22,6 +23,7 @@ function formatDuration(milliseconds) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
+// Componente de Login
 function IniciarSesion() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,29 +35,34 @@ function IniciarSesion() {
     setIsLoading(true);
 
     try {
-      // 1. Iniciar sesión con email y contraseña
+      // 1. Autenticação básica
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (authError || !user) {
-        throw authError || new Error('Usuario o contraseña inválidos');
+        throw authError || new Error('Credenciales inválidas');
       }
 
-      // 2. Verificar si el usuario está activo en la tabla users
+      // 2. Verificar status na tabela users
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('activo')
         .eq('id', user.id)
         .single();
 
-      if (userError || !userData?.activo) {
+      if (userError || !userData) {
+        throw new Error('Error al verificar el estado del usuario');
+      }
+
+      // 3. Validar si está activo
+      if (userData.activo !== true) {
         await supabase.auth.signOut();
         throw new Error('Tu cuenta no está activa. Contacta al administrador.');
       }
 
-      // 3. Si todo está correcto, redirigir
+      // 4. Redirigir si todo está correcto
       navigate('/');
     } catch (error) {
       toast.error(error.message);
@@ -117,6 +124,7 @@ function IniciarSesion() {
   );
 }
 
+// Componente Principal
 function PaginaPrincipal() {
   const [lugarTrabajo, setLugarTrabajo] = useState('');
   const [lugarPersonalizado, setLugarPersonalizado] = useState('');
@@ -132,6 +140,7 @@ function PaginaPrincipal() {
   const [eventosCalendario, setEventosCalendario] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  // Efectos y funciones auxiliares...
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -166,6 +175,19 @@ function PaginaPrincipal() {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
+        // Verificar nuevamente el estado activo al cargar
+        const { data: userData } = await supabase
+          .from('users')
+          .select('activo')
+          .eq('id', session.user.id)
+          .single();
+
+        if (!userData?.activo) {
+          await supabase.auth.signOut();
+          window.location.reload();
+          return;
+        }
+
         setUserId(session.user.id);
         buscarUltimoRegistro(session.user.id);
         buscarTodosRegistros(session.user.id);
@@ -174,18 +196,6 @@ function PaginaPrincipal() {
     };
     getSession();
   }, []);
-
-  useEffect(() => {
-    if (todosRegistros.length > 0) {
-      const eventos = todosRegistros.map(registro => ({
-        title: registro.workplace,
-        start: new Date(registro.start_time),
-        end: registro.end_time ? new Date(registro.end_time) : new Date(),
-        allDay: false,
-      }));
-      setEventosCalendario(eventos);
-    }
-  }, [todosRegistros]);
 
   const buscarLugaresTrabajo = async () => {
     try {
@@ -242,6 +252,14 @@ function PaginaPrincipal() {
 
       if (data) {
         setTodosRegistros(data);
+        // Preparar eventos para el calendario
+        const eventos = data.map(registro => ({
+          title: registro.workplace,
+          start: new Date(registro.start_time),
+          end: registro.end_time ? new Date(registro.end_time) : new Date(),
+          status: registro.end_time ? 'completado' : 'en progreso',
+        }));
+        setEventosCalendario(eventos);
       }
     } catch (error) {
       console.error('Error buscando todos los registros:', error);
@@ -282,7 +300,6 @@ function PaginaPrincipal() {
             setRegistroTiempo(registro);
             setEstaTrabajando(true);
             setUbicacionActual(position.coords);
-            localStorage.setItem('registroTiempo', JSON.stringify(registro));
             toast.success('¡Turno iniciado!');
             buscarTodosRegistros(userId);
           } catch (error) {
@@ -339,7 +356,6 @@ function PaginaPrincipal() {
           setEstaTrabajando(false);
           setTiempoTranscurrido(0);
           setUbicacionActual(null);
-          localStorage.removeItem('registroTiempo');
           setUltimoRegistro(null);
           buscarTodosRegistros(userId);
         } catch (error) {
@@ -363,8 +379,6 @@ function PaginaPrincipal() {
       colorFondo = '#28a745';
     } else if (evento.status === 'en progreso') {
       colorFondo = '#ffc107';
-    } else {
-      colorFondo = '#dc3545';
     }
     return {
       style: {
@@ -376,15 +390,6 @@ function PaginaPrincipal() {
         fontSize: '14px',
       },
     };
-  };
-
-  const generarEventosCalendario = () => {
-    return todosRegistros.map(registro => ({
-      title: registro.workplace,
-      start: new Date(registro.start_time),
-      end: registro.end_time ? new Date(registro.end_time) : new Date(),
-      status: registro.end_time ? 'completado' : 'en progreso',
-    }));
   };
 
   return (
@@ -435,6 +440,7 @@ function PaginaPrincipal() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="grid gap-6 md:grid-cols-2">
+          {/* Sección de Estado del Turno */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Estado del Turno
@@ -502,6 +508,7 @@ function PaginaPrincipal() {
             </div>
           </div>
 
+          {/* Sección de Control de Turno */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               {estaTrabajando ? 'Finalizar Turno' : 'Iniciar Turno'}
@@ -576,6 +583,7 @@ function PaginaPrincipal() {
           </div>
         </div>
 
+        {/* Calendario de Trabajo */}
         <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Calendario de Trabajo
@@ -595,7 +603,7 @@ function PaginaPrincipal() {
           <div className="overflow-x-auto">
             <BigCalendar
               localizer={localizer}
-              events={generarEventosCalendario()}
+              events={eventosCalendario}
               startAccessor="start"
               endAccessor="end"
               style={{ height: 500 }}
@@ -617,16 +625,53 @@ function PaginaPrincipal() {
   );
 }
 
+// Componente Principal de la Aplicación
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsLoggedIn(!!session);
-    });
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        // Verificación adicional del estado activo
+        const { data: userData } = await supabase
+          .from('users')
+          .select('activo')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (!userData?.activo) {
+          await supabase.auth.signOut();
+          setIsLoggedIn(false);
+        } else {
+          setIsLoggedIn(true);
+        }
+      } else {
+        setIsLoggedIn(false);
+      }
+    };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setIsLoggedIn(!!session);
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        // Verificar estado activo en cada cambio de autenticación
+        const { data: userData } = await supabase
+          .from('users')
+          .select('activo')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (!userData?.activo) {
+          await supabase.auth.signOut();
+          setIsLoggedIn(false);
+        } else {
+          setIsLoggedIn(true);
+        }
+      } else {
+        setIsLoggedIn(false);
+      }
     });
 
     return () => subscription?.unsubscribe();
@@ -634,6 +679,7 @@ function App() {
 
   return (
     <Router>
+      <Toaster position="top-right" />
       <Routes>
         <Route path="/" element={isLoggedIn ? <PaginaPrincipal /> : <IniciarSesion />} />
       </Routes>
