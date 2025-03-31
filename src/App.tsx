@@ -707,17 +707,23 @@ function PaginaPrincipal() {
   // Contenido para usuarios admin - Versión Corregida
 // Contenido para usuarios admin - Versión Corregida
 const renderAdminContent = () => {
-  // Verificación adicional de seguridad
-  if (!isAdminUser()) {
-    return renderNormalContent();
-  }
+  // Verificación de depuración
+  console.log('Renderizando admin content', {
+    isAdmin: isAdminUser(),
+    activeTab,
+    userEmail
+  });
 
   return (
-    <div className="space-y-6">
-      {/* Barra de pestañas */}
+    <div className="space-y-4">
+      {/* Barra de pestañas mejorada */}
       <div className="flex border-b border-gray-200">
         <button
-          className={`py-3 px-6 font-medium text-sm flex items-center ${activeTab === 'registro' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`px-4 py-2 font-medium text-sm flex items-center ${
+            activeTab === 'registro' 
+              ? 'border-b-2 border-blue-500 text-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
           onClick={() => setActiveTab('registro')}
         >
           <Clock className="w-4 h-4 mr-2" />
@@ -725,7 +731,11 @@ const renderAdminContent = () => {
         </button>
         
         <button
-          className={`py-3 px-6 font-medium text-sm flex items-center ${activeTab === 'boletas' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`px-4 py-2 font-medium text-sm flex items-center ${
+            activeTab === 'boletas' 
+              ? 'border-b-2 border-blue-500 text-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
           onClick={() => setActiveTab('boletas')}
         >
           <FileText className="w-4 h-4 mr-2" />
@@ -733,30 +743,41 @@ const renderAdminContent = () => {
         </button>
         
         <button
-          className={`py-3 px-6 font-medium text-sm flex items-center ${activeTab === 'dashboard' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`px-4 py-2 font-medium text-sm flex items-center ${
+            activeTab === 'dashboard' 
+              ? 'border-b-2 border-blue-500 text-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
           onClick={() => setActiveTab('dashboard')}
         >
-          <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z"/>
-            <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z"/>
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
           Dashboard
         </button>
       </div>
 
-      {/* Contenido de las pestañas */}
-      <div className="min-h-[500px]">
-        {activeTab === 'registro' && renderNormalContent()}
-        {activeTab === 'boletas' && <GestionBoletas />}
+      {/* Contenido con transición suave */}
+      <div className="transition-all duration-200">
+        {activeTab === 'registro' && (
+          <div className="animate-fadeIn">
+            {renderNormalContent()}
+          </div>
+        )}
+        
+        {activeTab === 'boletas' && (
+          <div className="animate-fadeIn">
+            <GestionBoletas />
+          </div>
+        )}
+        
         {activeTab === 'dashboard' && (
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Dashboard de Horas Trabajadas
-            </h2>
-            <div className="aspect-w-16 aspect-h-9">
+          <div className="animate-fadeIn">
+            <div className="bg-white rounded-lg shadow p-4">
               <iframe 
-                title="powerbi-dashboard"
-                className="w-full h-[700px] rounded-lg border"
+                title="Dashboard Power BI"
+                width="100%" 
+                height="700"
                 src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
                 frameBorder="0"
                 allowFullScreen
@@ -767,8 +788,7 @@ const renderAdminContent = () => {
       </div>
     </div>
   );
-}
-  ;
+};
 
   // Contenido para usuarios normales
   const renderNormalContent = () => (
