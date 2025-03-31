@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
-import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer } from 'lucide-react';
+import { HashRouter as Router, Routes, Route, useNavigate, Link } from 'react-router-dom';
+import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, FileText, Upload, Download } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import toast, { Toaster } from 'react-hot-toast';
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-// Configuração do calendário
+// Configuración del calendario
 const localizer = momentLocalizer(moment);
 moment.locale('es', {
   months: 'Enero_Febrero_Marzo_Abril_Mayo_Junio_Julio_Agosto_Septiembre_Octubre_Noviembre_Diciembre'.split('_'),
   weekdays: 'Domingo_Lunes_Martes_Miércoles_Jueves_Viernes_Sábado'.split('_')
 });
 
-// Função para formatar duração
+// Función para formatar duración
 function formatDuration(milliseconds) {
   const seconds = Math.floor(milliseconds / 1000);
   const hours = Math.floor(seconds / 3600);
@@ -33,24 +33,18 @@ function IniciarSesion() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    console.log('Iniciando processo de login...'); // Log inicial
+    console.log('Iniciando processo de login...');
 
     try {
-      // 1. Autenticação básica
-      console.log('Tentando autenticar com Supabase...'); // Log antes da chamada
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      console.log('Resposta do Supabase:', { user, authError }); // Log da resposta
 
       if (authError || !user) {
-        console.error('Erro de autenticação:', authError); // Log detalhado do erro
         throw authError || new Error('Credenciales inválidas');
       }
 
-      // 2. Verificar status na tabela users
-      console.log('Usuário autenticado, verificando status...'); // Log pós-autenticação
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('activo')
@@ -61,18 +55,14 @@ function IniciarSesion() {
         throw new Error('Error al verificar el estado del usuario');
       }
 
-      // 3. Validar si está activo
       if (userData.activo !== true) {
-        console.log('Usuário não ativo, fazendo logout...'); // Log para usuário inativo
         await supabase.auth.signOut();
         throw new Error('Tu cuenta no está activa. Contacta al administrador.');
       }
-      console.log('Autenticação completa, redirecionando...'); // Log final
 
-      // 4. Redirigir si todo está correcto
       navigate('/');
     } catch (error) {
-      console.error('Erro completo no login:', error); // Log detalhado
+      console.error('Erro completo no login:', error);
       toast.error(error.message);
     } finally {
       setIsLoading(false);
@@ -132,6 +122,300 @@ function IniciarSesion() {
   );
 }
 
+// Componente para Gestión de Boletas
+function GestionBoletas() {
+  const [usuarios, setUsuarios] = useState([]);
+  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('');
+  const [ano, setAno] = useState(new Date().getFullYear());
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [archivo, setArchivo] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [boletasExistentes, setBoletasExistentes] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Obtener lista de usuarios
+  useEffect(() => {
+    const cargarUsuarios = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, email, nombre')
+          .eq('activo', true)
+          .order('nombre', { ascending: true });
+
+        if (error) throw error;
+
+        setUsuarios(data);
+        if (data.length > 0) {
+          setUsuarioSeleccionado(data[0].id);
+        }
+      } catch (error) {
+        console.error('Error cargando usuarios:', error);
+        toast.error('Error al cargar usuarios');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    cargarUsuarios();
+  }, []);
+
+  // Cargar boletas existentes
+  useEffect(() => {
+    if (usuarioSeleccionado) {
+      cargarBoletasUsuario();
+    }
+  }, [usuarioSeleccionado]);
+
+  const cargarBoletasUsuario = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('boletas_pagos')
+        .select('*')
+        .eq('user_id', usuarioSeleccionado)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setBoletasExistentes(data || []);
+    } catch (error) {
+      console.error('Error cargando boletas:', error);
+      toast.error('Error al cargar boletas existentes');
+    }
+  };
+
+  const handleFileChange = (e) => {
+    setArchivo(e.target.files[0]);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!usuarioSeleccionado || !archivo) {
+      toast.error('Selecciona un usuario y un archivo');
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      // 1. Subir el archivo al storage
+      const fileExt = archivo.name.split('.').pop();
+      const fileName = `${usuarioSeleccionado}_${ano}_${mes}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('boletas')
+        .upload(filePath, archivo);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Obtener la URL pública del archivo
+      const { data: { publicUrl } } = supabase.storage
+        .from('boletas')
+        .getPublicUrl(filePath);
+
+      // 3. Guardar registro en la tabla boletas_pagos
+      const { error: insertError } = await supabase
+        .from('boletas_pagos')
+        .insert([
+          {
+            user_id: usuarioSeleccionado,
+            arquivo_url: publicUrl,
+            ano: ano,
+            mes: mes
+          }
+        ]);
+
+      if (insertError) throw insertError;
+
+      toast.success('Boleta subida correctamente');
+      setArchivo(null);
+      cargarBoletasUsuario();
+    } catch (error) {
+      console.error('Error subiendo boleta:', error);
+      toast.error('Error al subir la boleta: ' + error.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDownload = (url) => {
+    window.open(url, '_blank');
+  };
+
+  const handleDelete = async (id, url) => {
+    if (!window.confirm('¿Estás seguro de eliminar esta boleta?')) return;
+
+    try {
+      // Extraer el path del archivo de la URL
+      const filePath = url.split('/public/boletas/')[1];
+      
+      // 1. Eliminar de storage
+      const { error: deleteError } = await supabase.storage
+        .from('boletas')
+        .remove([filePath]);
+
+      if (deleteError) throw deleteError;
+
+      // 2. Eliminar registro de la tabla
+      const { error: deleteRecordError } = await supabase
+        .from('boletas_pagos')
+        .delete()
+        .eq('id', id);
+
+      if (deleteRecordError) throw deleteRecordError;
+
+      toast.success('Boleta eliminada correctamente');
+      cargarBoletasUsuario();
+    } catch (error) {
+      console.error('Error eliminando boleta:', error);
+      toast.error('Error al eliminar la boleta');
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+      <h2 className="text-lg font-semibold text-gray-900 mb-6">
+        Gestión de Boletas de Pago
+      </h2>
+
+      <form onSubmit={handleSubmit} className="space-y-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Usuario
+            </label>
+            <select
+              value={usuarioSeleccionado}
+              onChange={(e) => setUsuarioSeleccionado(e.target.value)}
+              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+              disabled={isLoading}
+            >
+              {usuarios.map((usuario) => (
+                <option key={usuario.id} value={usuario.id}>
+                  {usuario.nombre || usuario.email}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Año
+            </label>
+            <input
+              type="number"
+              value={ano}
+              onChange={(e) => setAno(parseInt(e.target.value))}
+              min="2000"
+              max="2100"
+              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Mes
+            </label>
+            <select
+              value={mes}
+              onChange={(e) => setMes(parseInt(e.target.value))}
+              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>
+                  {new Date(2000, m - 1, 1).toLocaleString('es-ES', { month: 'long' })}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Archivo de Boleta
+          </label>
+          <input
+            type="file"
+            onChange={handleFileChange}
+            className="block w-full text-sm text-gray-500
+              file:mr-4 file:py-2 file:px-4
+              file:rounded-md file:border-0
+              file:text-sm file:font-semibold
+              file:bg-blue-50 file:text-blue-700
+              hover:file:bg-blue-100"
+            accept=".pdf,.jpg,.jpeg,.png,.svg"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={isUploading || !archivo}
+          className="mt-4 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Upload className="w-5 h-5 mr-2" />
+          {isUploading ? 'Subiendo...' : 'Subir Boleta'}
+        </button>
+      </form>
+
+      <div>
+        <h3 className="text-md font-medium text-gray-900 mb-4">
+          Boletas existentes para este usuario
+        </h3>
+        
+        {boletasExistentes.length === 0 ? (
+          <p className="text-sm text-gray-500">No hay boletas registradas para este usuario.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Año</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mes</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha de Subida</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {boletasExistentes.map((boleta) => (
+                  <tr key={boleta.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{boleta.ano}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {new Date(2000, boleta.mes - 1, 1).toLocaleString('es-ES', { month: 'long' })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {new Date(boleta.created_at).toLocaleString('es-ES')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => handleDownload(boleta.arquivo_url)}
+                        className="text-blue-600 hover:text-blue-900 mr-4 flex items-center"
+                      >
+                        <Download className="w-4 h-4 mr-1" /> Descargar
+                      </button>
+                      <button
+                        onClick={() => handleDelete(boleta.id, boleta.arquivo_url)}
+                        className="text-red-600 hover:text-red-900 flex items-center"
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Componente Principal
 function PaginaPrincipal() {
   const [userEmail, setUserEmail] = useState('');
@@ -148,6 +432,7 @@ function PaginaPrincipal() {
   const [lugaresTrabajo, setLugaresTrabajo] = useState([]);
   const [eventosCalendario, setEventosCalendario] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [activeTab, setActiveTab] = useState('registro');
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -183,7 +468,6 @@ function PaginaPrincipal() {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // Verificar nuevamente el estado activo al cargar
         const { data: userData } = await supabase
           .from('users')
           .select('activo, email')
@@ -206,7 +490,6 @@ function PaginaPrincipal() {
     getSession();
   }, []);
 
-  // Función para verificar si es usuario admin
   const isAdminUser = () => {
     const adminEmails = [
       'admin_oficinas@sanpedrocargo.com',
@@ -270,7 +553,6 @@ function PaginaPrincipal() {
 
       if (data) {
         setTodosRegistros(data);
-        // Preparar eventos para el calendario
         const eventos = data.map(registro => ({
           title: registro.workplace,
           start: new Date(registro.start_time),
@@ -412,20 +694,47 @@ function PaginaPrincipal() {
 
   // Contenido para usuarios admin
   const renderAdminContent = () => (
-    <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">
-        Dashboard de Horas Trabajadas
-      </h2>
-      <iframe 
-        title="horas" 
-        width="100%" 
-        height="801" 
-        src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
-        frameBorder="0" 
-        allowFullScreen 
-        className="rounded-lg"
-      ></iframe>
-    </div>
+    <>
+      <div className="flex border-b border-gray-200 mb-6">
+        <button
+          className={`py-2 px-4 font-medium text-sm ${activeTab === 'registro' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('registro')}
+        >
+          Registro de Tiempos
+        </button>
+        <button
+          className={`py-2 px-4 font-medium text-sm ${activeTab === 'boletas' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('boletas')}
+        >
+          Boletas de Pago
+        </button>
+        <button
+          className={`py-2 px-4 font-medium text-sm ${activeTab === 'dashboard' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          Dashboard
+        </button>
+      </div>
+
+      {activeTab === 'registro' && renderNormalContent()}
+      {activeTab === 'boletas' && <GestionBoletas />}
+      {activeTab === 'dashboard' && (
+        <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Dashboard de Horas Trabajadas
+          </h2>
+          <iframe 
+            title="horas" 
+            width="100%" 
+            height="801" 
+            src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
+            frameBorder="0" 
+            allowFullScreen 
+            className="rounded-lg"
+          ></iframe>
+        </div>
+      )}
+    </>
   );
 
   // Contenido para usuarios normales
@@ -674,7 +983,6 @@ function App() {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
-        // Verificación adicional del estado activo
         const { data: userData } = await supabase
           .from('users')
           .select('activo')
@@ -696,7 +1004,6 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        // Verificar estado activo en cada cambio de autenticación
         const { data: userData } = await supabase
           .from('users')
           .select('activo')
