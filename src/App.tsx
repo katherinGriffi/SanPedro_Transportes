@@ -121,309 +121,14 @@ function IniciarSesion() {
 }
 
 // Componente para Gestión de Boletas
+// Versão simplificada do GestionBoletas para teste
 function GestionBoletas() {
-  const [usuarios, setUsuarios] = useState([]);
-  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('');
-  const [ano, setAno] = useState(new Date().getFullYear());
-  const [mes, setMes] = useState(new Date().getMonth() + 1);
-  const [archivo, setArchivo] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [boletasExistentes, setBoletasExistentes] = useState([]);
-  const [isUploading, setIsUploading] = useState(false);
-
-  useEffect(() => {
-    const cargarUsuarios = async () => {
-      setIsLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .select('id, email, nombre')
-          .eq('activo', true)
-          .order('nombre', { ascending: true });
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          setUsuarios(data);
-          setUsuarioSeleccionado(data[0].id);
-        }
-      } catch (error) {
-        console.error('Error cargando usuarios:', error);
-        toast.error('Error al cargar usuarios: ' + error.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    cargarUsuarios();
-  }, []);
-
-  useEffect(() => {
-    if (usuarioSeleccionado) {
-      cargarBoletasUsuario();
-    }
-  }, [usuarioSeleccionado]);
-
-  const cargarBoletasUsuario = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('boletas_pagos')
-        .select('*')
-        .eq('user_id', usuarioSeleccionado)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      setBoletasExistentes(data || []);
-    } catch (error) {
-      console.error('Error cargando boletas:', error);
-      toast.error('Error al cargar boletas: ' + error.message);
-    }
-  };
-
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setArchivo(e.target.files[0]);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!usuarioSeleccionado || !archivo) {
-      toast.error('Selecciona un usuario y un archivo');
-      return;
-    }
-
-    setIsUploading(true);
-
-    try {
-      const fileExt = archivo.name.split('.').pop();
-      const fileName = `${usuarioSeleccionado}_${ano}_${mes}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('boletas')
-        .upload(filePath, archivo);
-
-      if (uploadError) {
-        if (uploadError.message.includes('already exists')) {
-          const { error: updateError } = await supabase.storage
-            .from('boletas')
-            .update(filePath, archivo);
-          
-          if (updateError) throw updateError;
-        } else {
-          throw uploadError;
-        }
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('boletas')
-        .getPublicUrl(filePath);
-
-      const { error: insertError } = await supabase
-        .from('boletas_pagos')
-        .upsert(
-          {
-            user_id: usuarioSeleccionado,
-            arquivo_url: publicUrl,
-            ano: ano,
-            mes: mes
-          },
-          { onConflict: ['user_id', 'ano', 'mes'] }
-        );
-
-      if (insertError) throw insertError;
-
-      toast.success('Boleta subida correctamente');
-      setArchivo(null);
-      await cargarBoletasUsuario();
-    } catch (error) {
-      console.error('Error subiendo boleta:', error);
-      toast.error('Error al subir la boleta: ' + error.message);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleDownload = (url) => {
-    window.open(url, '_blank');
-  };
-
-  const handleDelete = async (id, url) => {
-    if (!window.confirm('¿Estás seguro de eliminar esta boleta?')) return;
-
-    try {
-      const filePath = url.split('/storage/v1/object/public/boletas/')[1];
-      
-      const { error: deleteError } = await supabase.storage
-        .from('boletas')
-        .remove([filePath]);
-
-      if (deleteError && !deleteError.message.includes('not found')) {
-        throw deleteError;
-      }
-
-      const { error: deleteRecordError } = await supabase
-        .from('boletas_pagos')
-        .delete()
-        .eq('id', id);
-
-      if (deleteRecordError) throw deleteRecordError;
-
-      toast.success('Boleta eliminada correctamente');
-      await cargarBoletasUsuario();
-    } catch (error) {
-      console.error('Error eliminando boleta:', error);
-      toast.error('Error al eliminar la boleta: ' + error.message);
-    }
-  };
-
   return (
-    <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-      <h2 className="text-lg font-semibold text-gray-900 mb-6">
-        Gestión de Boletas de Pago
-      </h2>
-
-      <form onSubmit={handleSubmit} className="space-y-4 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Usuario
-            </label>
-            <select
-              value={usuarioSeleccionado}
-              onChange={(e) => setUsuarioSeleccionado(e.target.value)}
-              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-              disabled={isLoading}
-            >
-              {usuarios.map((usuario) => (
-                <option key={usuario.id} value={usuario.id}>
-                  {usuario.nombre || usuario.email}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Año
-            </label>
-            <input
-              type="number"
-              value={ano}
-              onChange={(e) => setAno(Number(e.target.value))}
-              min="2000"
-              max="2100"
-              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Mes
-            </label>
-            <select
-              value={mes}
-              onChange={(e) => setMes(Number(e.target.value))}
-              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>
-                  {new Date(2000, m - 1, 1).toLocaleString('es-ES', { month: 'long' })}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Archivo de Boleta (PDF, JPG, PNG)
-          </label>
-          <input
-            type="file"
-            onChange={handleFileChange}
-            className="block w-full text-sm text-gray-500
-              file:mr-4 file:py-2 file:px-4
-              file:rounded-md file:border-0
-              file:text-sm file:font-semibold
-              file:bg-blue-50 file:text-blue-700
-              hover:file:bg-blue-100"
-            accept=".pdf,.jpg,.jpeg,.png"
-            required
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={isUploading || !archivo}
-          className="mt-4 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Upload className="w-5 h-5 mr-2" />
-          {isUploading ? 'Subiendo...' : 'Subir Boleta'}
-        </button>
-      </form>
-
-      <div>
-        <h3 className="text-md font-medium text-gray-900 mb-4">
-          Boletas existentes para este usuario
-        </h3>
-        
-        {isLoading ? (
-          <p className="text-sm text-gray-500">Cargando...</p>
-        ) : boletasExistentes.length === 0 ? (
-          <p className="text-sm text-gray-500">No hay boletas registradas para este usuario.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Año</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mes</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha de Subida</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {boletasExistentes.map((boleta) => (
-                  <tr key={boleta.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{boleta.ano}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(2000, boleta.mes - 1, 1).toLocaleString('es-ES', { month: 'long' })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(boleta.created_at).toLocaleString('es-ES')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => handleDownload(boleta.arquivo_url)}
-                        className="text-blue-600 hover:text-blue-900 mr-4 flex items-center"
-                      >
-                        <Download className="w-4 h-4 mr-1" /> Descargar
-                      </button>
-                      <button
-                        onClick={() => handleDelete(boleta.id, boleta.arquivo_url)}
-                        className="text-red-600 hover:text-red-900 flex items-center"
-                      >
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+    <div className="p-4 bg-red-500 text-white text-lg font-bold">
+      COMPONENTE GESTION BOLETAS ESTÁ SIENDO RENDERIZADO!
     </div>
   );
 }
-
 // Componente Principal
 function PaginaPrincipal() {
   const [userEmail, setUserEmail] = useState('');
@@ -443,6 +148,9 @@ function PaginaPrincipal() {
   const [activeTab, setActiveTab] = useState('registro'); // Asegurar que empiece con 'registro'
 
   useEffect(() => {
+    console.log('USER EMAIL:', userEmail); // Verifique se aparece
+    console.log('IS ADMIN:', isAdminUser()); // Deve ser true para admin
+    console.log('ACTIVE TAB:', activeTab); // Deve cambiar al clickar
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
@@ -707,89 +415,39 @@ function PaginaPrincipal() {
   // Contenido para usuarios admin - Versión Corregida
 // Contenido para usuarios admin - Versión Corregida
 const renderAdminContent = () => {
-  // Verificación de depuración
-  console.log('Renderizando admin content', {
-    isAdmin: isAdminUser(),
-    activeTab,
-    userEmail
-  });
-
+  console.log('RENDER ADMIN CONTENT - ActiveTab:', activeTab); // Deve aparecer no console
+  
   return (
-    <div className="space-y-4">
-      {/* Barra de pestañas mejorada */}
-      <div className="flex border-b border-gray-200">
-        <button
-          className={`px-4 py-2 font-medium text-sm flex items-center ${
-            activeTab === 'registro' 
-              ? 'border-b-2 border-blue-500 text-blue-600' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
+    <div>
+      <div className="flex space-x-4 mb-4">
+        <button 
           onClick={() => setActiveTab('registro')}
+          className="px-4 py-2 bg-blue-500 text-white rounded"
         >
-          <Clock className="w-4 h-4 mr-2" />
           Registro
         </button>
-        
-        <button
-          className={`px-4 py-2 font-medium text-sm flex items-center ${
-            activeTab === 'boletas' 
-              ? 'border-b-2 border-blue-500 text-blue-600' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
+        <button 
           onClick={() => setActiveTab('boletas')}
+          className="px-4 py-2 bg-blue-500 text-white rounded"
         >
-          <FileText className="w-4 h-4 mr-2" />
           Boletas
         </button>
-        
-        <button
-          className={`px-4 py-2 font-medium text-sm flex items-center ${
-            activeTab === 'dashboard' 
-              ? 'border-b-2 border-blue-500 text-blue-600' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
+        <button 
           onClick={() => setActiveTab('dashboard')}
+          className="px-4 py-2 bg-blue-500 text-white rounded"
         >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
           Dashboard
         </button>
       </div>
 
-      {/* Contenido con transición suave */}
-      <div className="transition-all duration-200">
-        {activeTab === 'registro' && (
-          <div className="animate-fadeIn">
-            {renderNormalContent()}
-          </div>
-        )}
-        
-        {activeTab === 'boletas' && (
-          <div className="animate-fadeIn">
-            <GestionBoletas />
-          </div>
-        )}
-        
-        {activeTab === 'dashboard' && (
-          <div className="animate-fadeIn">
-            <div className="bg-white rounded-lg shadow p-4">
-              <iframe 
-                title="Dashboard Power BI"
-                width="100%" 
-                height="700"
-                src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
-                frameBorder="0"
-                allowFullScreen
-              />
-            </div>
-          </div>
-        )}
+      <div className="border p-4">
+        {activeTab === 'registro' && <div>Contenido de Registro</div>}
+        {activeTab === 'boletas' && <GestionBoletas />}
+        {activeTab === 'dashboard' && <div>Contenido de Dashboard</div>}
       </div>
     </div>
   );
 };
-
   // Contenido para usuarios normales
   const renderNormalContent = () => (
     <>
