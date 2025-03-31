@@ -126,6 +126,7 @@ function IniciarSesion() {
 
 // Componente Principal
 function PaginaPrincipal() {
+  const [userEmail, setUserEmail] = useState('');
   const [lugarTrabajo, setLugarTrabajo] = useState('');
   const [lugarPersonalizado, setLugarPersonalizado] = useState('');
   const [registroTiempo, setRegistroTiempo] = useState(null);
@@ -140,7 +141,6 @@ function PaginaPrincipal() {
   const [eventosCalendario, setEventosCalendario] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Efectos y funciones auxiliares...
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -178,7 +178,7 @@ function PaginaPrincipal() {
         // Verificar nuevamente el estado activo al cargar
         const { data: userData } = await supabase
           .from('users')
-          .select('activo')
+          .select('activo, email')
           .eq('id', session.user.id)
           .single();
 
@@ -189,6 +189,7 @@ function PaginaPrincipal() {
         }
 
         setUserId(session.user.id);
+        setUserEmail(userData.email);
         buscarUltimoRegistro(session.user.id);
         buscarTodosRegistros(session.user.id);
         buscarLugaresTrabajo();
@@ -196,6 +197,15 @@ function PaginaPrincipal() {
     };
     getSession();
   }, []);
+
+  // Función para verificar si es usuario admin
+  const isAdminUser = () => {
+    const adminEmails = [
+      'admin_oficinas@sanpedrocargo.com',
+      'admin_ruta@sanpedrocargo.com'
+    ];
+    return adminEmails.includes(userEmail);
+  };
 
   const buscarLugaresTrabajo = async () => {
     try {
@@ -392,6 +402,208 @@ function PaginaPrincipal() {
     };
   };
 
+  // Contenido para usuarios admin
+  const renderAdminContent = () => (
+    <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+      <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        Dashboard de Horas Trabajadas
+      </h2>
+      <iframe 
+        title="horas" 
+        width="100%" 
+        height="801" 
+        src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
+        frameBorder="0" 
+        allowFullScreen 
+        className="rounded-lg"
+      ></iframe>
+    </div>
+  );
+
+  // Contenido para usuarios normales
+  const renderNormalContent = () => (
+    <>
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Estado del Turno
+          </h2>
+          <div className="space-y-4">
+            <div className="flex items-start space-x-3">
+              <Calendar className="w-5 h-5 text-gray-500 mt-1" />
+              <div>
+                <p className="text-sm font-medium text-gray-700">Fecha</p>
+                <p className="text-sm text-gray-600">
+                  {new Date().toLocaleDateString('es-ES', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </p>
+              </div>
+            </div>
+            
+            {estaTrabajando && registroTiempo && (
+              <>
+                <div className="flex items-start space-x-3">
+                  <Clock className="w-5 h-5 text-gray-500 mt-1" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
+                    <p className="text-sm text-gray-600">
+                      {new Date(registroTiempo.start_time).toLocaleTimeString('es-ES')}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start space-x-3">
+                  <Timer className="w-5 h-5 text-gray-500 mt-1" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
+                    <p className="text-xl font-bold text-blue-600">
+                      {formatDuration(tiempoTranscurrido)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
+                    <p className="text-sm text-gray-600">{registroTiempo.workplace}</p>
+                  </div>
+                </div>
+
+                {ubicacionActual && (
+                  <div className="flex items-start space-x-3">
+                    <MapPin className="w-5 h-5 text-gray-500 mt-1" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
+                      <p className="text-sm text-gray-600">
+                        Lat: {ubicacionActual.latitude.toFixed(6)}<br />
+                        Long: {ubicacionActual.longitude.toFixed(6)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            {estaTrabajando ? 'Finalizar Turno' : 'Iniciar Turno'}
+          </h2>
+          
+          {!estaTrabajando ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Lugar de Trabajo
+                </label>
+                <select
+                  value={lugarTrabajo}
+                  onChange={(e) => setLugarTrabajo(e.target.value)}
+                  className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                >
+                  {lugaresTrabajo.map((lugar) => (
+                    <option key={lugar.id} value={lugar.name}>
+                      {lugar.name}
+                    </option>
+                  ))}
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+              
+              {lugarTrabajo === 'Otro' && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Especificar lugar de trabajo
+                  </label>
+                  <input
+                    type="text"
+                    value={lugarPersonalizado}
+                    onChange={(e) => setLugarPersonalizado(e.target.value)}
+                    placeholder="Ingresa el lugar de trabajo"
+                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                  />
+                </div>
+              )}
+              
+              <button
+                onClick={iniciarTurno}
+                disabled={estaProcesando}
+                className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+              >
+                <Clock className="w-5 h-5" />
+                <span>{estaProcesando ? 'Procesando...' : 'Iniciar Turno'}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
+                <div className="flex items-center space-x-2 text-yellow-800">
+                  <MapPin className="w-5 h-5" />
+                  <span className="font-medium">Turno en progreso</span>
+                </div>
+                <p className="mt-1 text-sm text-yellow-700">
+                  Asegúrate de finalizar tu turno antes de salir.
+                </p>
+              </div>
+              
+              <button
+                onClick={finalizarTurno}
+                disabled={estaProcesando}
+                className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+              >
+                <Clock className="w-5 h-5" />
+                <span>{estaProcesando ? 'Procesando...' : 'Finalizar Turno'}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Calendario de Trabajo
+        </h2>
+
+        <div className="mb-6 flex flex-wrap gap-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 bg-green-500 rounded-sm"></div>
+            <span className="text-sm text-gray-950">Turno Completado</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
+            <span className="text-sm text-gray-950">Turno en Progreso</span>
+          </div>
+        </div>  
+
+        <div className="overflow-x-auto">
+          <BigCalendar
+            localizer={localizer}
+            events={eventosCalendario}
+            startAccessor="start"
+            endAccessor="end"
+            style={{ height: 500 }}
+            eventPropGetter={estiloEvento}
+            defaultView="month"
+            messages={{
+              today: 'Hoy',
+              previous: 'Anterior',
+              next: 'Siguiente',
+              month: 'Mes',
+              week: 'Semana',
+              day: 'Día',
+            }}
+          />
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700">
       <Toaster position="top-right" />
@@ -413,7 +625,7 @@ function PaginaPrincipal() {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 text-gray-700">
                 <User className="w-5 h-5" />
-                <span>{userId}</span>
+                <span>{userEmail}</span>
               </div>
               <div className="flex items-center space-x-2 text-gray-700">
                 <Clock className="w-5 h-5" />
@@ -439,187 +651,7 @@ function PaginaPrincipal() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Sección de Estado del Turno */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Estado del Turno
-            </h2>
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <Calendar className="w-5 h-5 text-gray-500 mt-1" />
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Fecha</p>
-                  <p className="text-sm text-gray-600">
-                    {new Date().toLocaleDateString('es-ES', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                  </p>
-                </div>
-              </div>
-              
-              {estaTrabajando && registroTiempo && (
-                <>
-                  <div className="flex items-start space-x-3">
-                    <Clock className="w-5 h-5 text-gray-500 mt-1" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
-                      <p className="text-sm text-gray-600">
-                        {new Date(registroTiempo.start_time).toLocaleTimeString('es-ES')}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-start space-x-3">
-                    <Timer className="w-5 h-5 text-gray-500 mt-1" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
-                      <p className="text-xl font-bold text-blue-600">
-                        {formatDuration(tiempoTranscurrido)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start space-x-3">
-                    <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
-                      <p className="text-sm text-gray-600">{registroTiempo.workplace}</p>
-                    </div>
-                  </div>
-
-                  {ubicacionActual && (
-                    <div className="flex items-start space-x-3">
-                      <MapPin className="w-5 h-5 text-gray-500 mt-1" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
-                        <p className="text-sm text-gray-600">
-                          Lat: {ubicacionActual.latitude.toFixed(6)}<br />
-                          Long: {ubicacionActual.longitude.toFixed(6)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Sección de Control de Turno */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              {estaTrabajando ? 'Finalizar Turno' : 'Iniciar Turno'}
-            </h2>
-            
-            {!estaTrabajando ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Lugar de Trabajo
-                  </label>
-                  <select
-                    value={lugarTrabajo}
-                    onChange={(e) => setLugarTrabajo(e.target.value)}
-                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                  >
-                    {lugaresTrabajo.map((lugar) => (
-                      <option key={lugar.id} value={lugar.name}>
-                        {lugar.name}
-                      </option>
-                    ))}
-                    <option value="Otro">Otro</option>
-                  </select>
-                </div>
-                
-                {lugarTrabajo === 'Otro' && (
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Especificar lugar de trabajo
-                    </label>
-                    <input
-                      type="text"
-                      value={lugarPersonalizado}
-                      onChange={(e) => setLugarPersonalizado(e.target.value)}
-                      placeholder="Ingresa el lugar de trabajo"
-                      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                    />
-                  </div>
-                )}
-                
-                <button
-                  onClick={iniciarTurno}
-                  disabled={estaProcesando}
-                  className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
-                >
-                  <Clock className="w-5 h-5" />
-                  <span>{estaProcesando ? 'Procesando...' : 'Iniciar Turno'}</span>
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
-                  <div className="flex items-center space-x-2 text-yellow-800">
-                    <MapPin className="w-5 h-5" />
-                    <span className="font-medium">Turno en progreso</span>
-                  </div>
-                  <p className="mt-1 text-sm text-yellow-700">
-                    Asegúrate de finalizar tu turno antes de salir.
-                  </p>
-                </div>
-                
-                <button
-                  onClick={finalizarTurno}
-                  disabled={estaProcesando}
-                  className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
-                >
-                  <Clock className="w-5 h-5" />
-                  <span>{estaProcesando ? 'Procesando...' : 'Finalizar Turno'}</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Calendario de Trabajo */}
-        <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Calendario de Trabajo
-          </h2>
-
-          <div className="mb-6 flex flex-wrap gap-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-green-500 rounded-sm"></div>
-              <span className="text-sm text-gray-950">Turno Completado</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
-              <span className="text-sm text-gray-950">Turno en Progreso</span>
-            </div>
-          </div>  
-
-          <div className="overflow-x-auto">
-            <BigCalendar
-              localizer={localizer}
-              events={eventosCalendario}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 500 }}
-              eventPropGetter={estiloEvento}
-              defaultView="month"
-              messages={{
-                today: 'Hoy',
-                previous: 'Anterior',
-                next: 'Siguiente',
-                month: 'Mes',
-                week: 'Semana',
-                day: 'Día',
-              }}
-            />
-          </div>
-        </div>
+        {isAdminUser() ? renderAdminContent() : renderNormalContent()}
       </main>
     </div>
   );
