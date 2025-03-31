@@ -7,7 +7,7 @@ import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-// Configuración de moment para el calendario
+// Configuração de moment para o calendário
 const localizer = momentLocalizer(moment);
 moment.locale('es', {
   months: 'Enero_Febrero_Marzo_Abril_Mayo_Junio_Julio_Agosto_Septiembre_Octubre_Noviembre_Diciembre'.split('_'),
@@ -194,18 +194,28 @@ function IniciarSesion() {
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
-// eliminar 
-
-useEffect(() => {
-  console.log("Entorno:", import.meta.env.MODE, "Mostrar enlace:", !showForgotPassword);
-}, [showForgotPassword]);
-//
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
+      // Primeiro verifica se o usuário está ativo
+      const { data: userData, error: userError } = await supabase
+        .from('users') // substitua por sua tabela de usuários
+        .select('Activo')
+        .eq('email', email)
+        .single();
+
+      if (userError || !userData) {
+        throw new Error('Usuario no encontrado');
+      }
+
+      if (!userData.Activo) {
+        throw new Error('Tu cuenta no está activa. Contacta al administrador.');
+      }
+
+      // Se está ativo, procede com o login
       const { data: { user }, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -242,8 +252,6 @@ useEffect(() => {
       setIsLoading(false);
     }
   };
-  console.log("Renderizando IniciarSesion. showForgotPassword:", showForgotPassword);
-
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center p-4">
@@ -337,16 +345,12 @@ useEffect(() => {
               <LogIn className="w-5 h-5 mr-2" />
               {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
-            <div style={{ color: "red", fontWeight: "bold", textAlign: "center" }}>
-            DEBUG: ¿Este texto aparece en producción?
-            </div>
             
             <div className="text-center pt-2">
               <button
                 type="button"
                 onClick={() => setShowForgotPassword(true)}
-                style={{ color: '#2563eb', textDecoration: 'underline' }} // Equivalente a text-blue-600 y underline
-                className="text-sm hover:text-blue-800"
+                className="text-blue-600 hover:text-blue-800 text-sm underline"
               >
                 ¿Olvidaste tu contraseña?
               </button>
@@ -407,6 +411,18 @@ function PaginaPrincipal() {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
+        // Verificar si el usuario está activo
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('Activo')
+          .eq('email', session.user.email)
+          .single();
+
+        if (error || !userData || !userData.Activo) {
+          await supabase.auth.signOut();
+          return;
+        }
+
         setUserId(session.user.id);
         buscarUltimoRegistro(session.user.id);
         buscarTodosRegistros(session.user.id);
@@ -862,13 +878,44 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsLoggedIn(!!session);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        // Verificar si el usuario está activo
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('Activo')
+          .eq('email', session.user.email)
+          .single();
+
+        if (!error && userData && userData.Activo) {
+          setIsLoggedIn(true);
+        } else {
+          await supabase.auth.signOut();
+          setIsLoggedIn(false);
+        }
+      } else {
+        setIsLoggedIn(false);
+      }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("Cambio de estado de sesión:", event, "Sesión:", !!session);
-      setIsLoggedIn(!!session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        // Verificar si el usuario está activo
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('Activo')
+          .eq('email', session.user.email)
+          .single();
+
+        if (!error && userData && userData.Activo) {
+          setIsLoggedIn(true);
+        } else {
+          await supabase.auth.signOut();
+          setIsLoggedIn(false);
+        }
+      } else {
+        setIsLoggedIn(false);
+      }
     });
 
     return () => subscription?.unsubscribe();
