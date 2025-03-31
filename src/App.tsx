@@ -205,10 +205,11 @@ function IniciarSesion() {
         .from('users') // substitua por sua tabela de usuários
         .select('Activo')
         .eq('email', email)
+        .eq('Activo', true) // Adicionado esta linha
         .single();
 
       if (userError || !userData) {
-        throw new Error('Usuario no encontrado');
+        throw new Error('Usuario no encontrado o cuenta no activa');
       }
 
       if (!userData.Activo) {
@@ -416,6 +417,7 @@ function PaginaPrincipal() {
           .from('users')
           .select('Activo')
           .eq('email', session.user.email)
+          .eq('Activo', true) // Adicionado esta linha
           .single();
 
         if (error || !userData || !userData.Activo) {
