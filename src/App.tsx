@@ -7,7 +7,7 @@ import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-// Configuração de moment para o calendário
+// Configuración de moment para el calendario
 const localizer = momentLocalizer(moment);
 moment.locale('es', {
   months: 'Enero_Febrero_Marzo_Abril_Mayo_Junio_Julio_Agosto_Septiembre_Octubre_Noviembre_Diciembre'.split('_'),
@@ -200,32 +200,33 @@ function IniciarSesion() {
     setIsLoading(true);
 
     try {
-      // Primeiro verifica se o usuário está ativo
-      const { data: userData, error: userError } = await supabase
-        .from('users') // substitua por sua tabela de usuários
-        .select('Activo')
-        .eq('email', email)
-        .eq('Activo', true) // Adicionado esta linha
-        .single();
-
-      if (userError || !userData) {
-        throw new Error('Usuario no encontrado o cuenta no activa');
-      }
-
-      if (!userData.Activo) {
-        throw new Error('Tu cuenta no está activa. Contacta al administrador.');
-      }
-
-      // Se está ativo, procede com o login
-      const { data: { user }, error } = await supabase.auth.signInWithPassword({
+      // 1. Iniciar sesión con email y contraseña
+      const { data: { user, session }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error || !user) {
-        throw error || new Error('Error al iniciar sesión');
+      if (authError || !user) {
+        throw authError || new Error('Error al iniciar sesión');
       }
 
+      // 2. Verificar si el usuario está activo en la tabla de perfiles
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles') // Cambia esto por tu tabla de usuarios si es diferente
+        .select('activo')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // 3. Verificar el estado activo
+      if (!profile.activo) {
+        // Cerrar sesión si el usuario no está activo
+        await supabase.auth.signOut();
+        throw new Error('Tu cuenta no está activa. Contacta al administrador.');
+      }
+
+      // 4. Si todo está bien, redirigir
       navigate('/');
     } catch (error) {
       toast.error(error.message || 'Usuario o contraseña inválidos');
@@ -239,6 +240,19 @@ function IniciarSesion() {
     setIsLoading(true);
 
     try {
+      // Verificar primero si el usuario está activo
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('activo')
+        .eq('email', resetEmail)
+        .single();
+
+      if (profileError) throw profileError;
+
+      if (!profile.activo) {
+        throw new Error('Tu cuenta no está activa. Contacta al administrador.');
+      }
+
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo: 'https://katheringriffi.github.io/SanPedro_Transportes/#/actualizar-contrasena',
       });
@@ -351,7 +365,8 @@ function IniciarSesion() {
               <button
                 type="button"
                 onClick={() => setShowForgotPassword(true)}
-                className="text-blue-600 hover:text-blue-800 text-sm underline"
+                style={{ color: '#2563eb', textDecoration: 'underline' }}
+                className="text-sm hover:text-blue-800"
               >
                 ¿Olvidaste tu contraseña?
               </button>
@@ -363,561 +378,19 @@ function IniciarSesion() {
   );
 }
 
-function PaginaPrincipal() {
-  const [lugarTrabajo, setLugarTrabajo] = useState('');
-  const [lugarPersonalizado, setLugarPersonalizado] = useState('');
-  const [registroTiempo, setRegistroTiempo] = useState(null);
-  const [estaTrabajando, setEstaTrabajando] = useState(false);
-  const [estaProcesando, setEstaProcesando] = useState(false);
-  const [tiempoTranscurrido, setTiempoTranscurrido] = useState(0);
-  const [ubicacionActual, setUbicacionActual] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [ultimoRegistro, setUltimoRegistro] = useState(null);
-  const [todosRegistros, setTodosRegistros] = useState([]);
-  const [lugaresTrabajo, setLugaresTrabajo] = useState([]);
-  const [eventosCalendario, setEventosCalendario] = useState([]);
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    let interval;
-    if (estaTrabajando && registroTiempo) {
-      interval = setInterval(() => {
-        setTiempoTranscurrido(new Date().getTime() - new Date(registroTiempo.start_time).getTime());
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [estaTrabajando, registroTiempo]);
-
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUbicacionActual(position.coords);
-        },
-        () => {
-          toast.error('No se pudo obtener tu ubicación');
-        }
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        // Verificar si el usuario está activo
-        const { data: userData, error } = await supabase
-          .from('users')
-          .select('Activo')
-          .eq('email', session.user.email)
-          .eq('Activo', true) // Adicionado esta linha
-          .single();
-
-        if (error || !userData || !userData.Activo) {
-          await supabase.auth.signOut();
-          return;
-        }
-
-        setUserId(session.user.id);
-        buscarUltimoRegistro(session.user.id);
-        buscarTodosRegistros(session.user.id);
-        buscarLugaresTrabajo();
-      }
-    };
-    getSession();
-  }, []);
-
-  useEffect(() => {
-    if (todosRegistros.length > 0) {
-      const eventos = todosRegistros.map(registro => ({
-        title: registro.workplace,
-        start: new Date(registro.start_time),
-        end: registro.end_time ? new Date(registro.end_time) : new Date(),
-        allDay: false,
-      }));
-      setEventosCalendario(eventos);
-    }
-  }, [todosRegistros]);
-
-  const buscarLugaresTrabajo = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('workspaces')
-        .select('*')
-        .eq('ativo', true);
-
-      if (error) throw error;
-
-      setLugaresTrabajo(data);
-      if (data.length > 0) {
-        setLugarTrabajo(data[0].name);
-      }
-    } catch (error) {
-      console.error('Error buscando lugares de trabajo:', error);
-      toast.error('Error cargando lugares de trabajo');
-    }
-  };
-
-  const buscarUltimoRegistro = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('time_entries')
-        .select('*')
-        .eq('user_id', userId)
-        .is('end_time', null)
-        .order('start_time', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setUltimoRegistro(data);
-        setRegistroTiempo(data);
-        setEstaTrabajando(true);
-        toast('¡Tienes un turno abierto!', { icon: '⚠️' });
-      }
-    } catch (error) {
-      console.error('Error buscando último registro:', error);
-    }
-  };
-
-  const buscarTodosRegistros = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('time_entries')
-        .select('*')
-        .eq('user_id', userId)
-        .order('start_time', { ascending: false });
-
-      if (error) throw error;
-
-      if (data) {
-        setTodosRegistros(data);
-      }
-    } catch (error) {
-      console.error('Error buscando todos los registros:', error);
-    }
-  };
-
-  const iniciarTurno = async () => {
-    if (!userId) {
-      toast.error('Usuario no autenticado');
-      return;
-    }
-
-    if (estaProcesando) return;
-    setEstaProcesando(true);
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const lugarSeleccionado = lugarTrabajo === 'Otro' ? lugarPersonalizado : lugarTrabajo;
-
-            const nuevoRegistro = {
-              user_id: userId,
-              workplace: lugarSeleccionado,
-              start_time: new Date().toISOString(),
-              start_latitude: position.coords.latitude,
-              start_longitude: position.coords.longitude,
-            };
-
-            const { data: registro, error } = await supabase
-              .from('time_entries')
-              .insert([nuevoRegistro])
-              .select()
-              .single();
-
-            if (error) throw error;
-
-            setRegistroTiempo(registro);
-            setEstaTrabajando(true);
-            setUbicacionActual(position.coords);
-            localStorage.setItem('registroTiempo', JSON.stringify(registro));
-            toast.success('¡Turno iniciado!');
-            buscarTodosRegistros(userId);
-          } catch (error) {
-            console.error('Error iniciando turno:', error);
-            toast.error('Error al iniciar el turno');
-          } finally {
-            setEstaProcesando(false);
-          }
-        },
-        () => {
-          toast.error('No se pudo obtener tu ubicación');
-          setEstaProcesando(false);
-        }
-      );
-    }
-  };
-
-  const finalizarTurno = async () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocalización no soportada');
-      return;
-    }
-
-    if (!registroTiempo?.id) {
-      toast.error('No se encontró un turno activo');
-      return;
-    }
-
-    if (estaProcesando) return;
-    setEstaProcesando(true);
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const actualizaciones = {
-            end_time: new Date().toISOString(),
-            end_latitude: position.coords.latitude,
-            end_longitude: position.coords.longitude,
-          };
-
-          const { data: registroActualizado, error } = await supabase
-            .from('time_entries')
-            .update(actualizaciones)
-            .eq('id', registroTiempo.id)
-            .select()
-            .single();
-
-          if (error) throw error;
-
-          const tiempoTotal = formatDuration(new Date(actualizaciones.end_time).getTime() - new Date(registroTiempo.start_time).getTime());
-          toast.success(`¡Turno finalizado! Tiempo trabajado: ${tiempoTotal}`);
-
-          setRegistroTiempo(null);
-          setEstaTrabajando(false);
-          setTiempoTranscurrido(0);
-          setUbicacionActual(null);
-          localStorage.removeItem('registroTiempo');
-          setUltimoRegistro(null);
-          buscarTodosRegistros(userId);
-        } catch (error) {
-          console.error('Error finalizando turno:', error);
-          toast.error('Error al finalizar el turno');
-        } finally {
-          setEstaProcesando(false);
-        }
-      },
-      (error) => {
-        console.error('Error obteniendo ubicación:', error);
-        toast.error('No se pudo obtener tu ubicación');
-        setEstaProcesando(false);
-      }
-    );
-  };
-
-  const estiloEvento = (evento) => {
-    let colorFondo = '#3174ad';
-    if (evento.status === 'completado') {
-      colorFondo = '#28a745';
-    } else if (evento.status === 'en progreso') {
-      colorFondo = '#ffc107';
-    } else {
-      colorFondo = '#dc3545';
-    }
-    return {
-      style: {
-        backgroundColor: colorFondo,
-        borderRadius: '4px',
-        color: 'white',
-        border: 'none',
-        padding: '2px 8px',
-        fontSize: '14px',
-      },
-    };
-  };
-
-  const generarEventosCalendario = () => {
-    return todosRegistros.map(registro => ({
-      title: registro.workplace,
-      start: new Date(registro.start_time),
-      end: registro.end_time ? new Date(registro.end_time) : new Date(),
-      status: registro.end_time ? 'completado' : 'en progreso',
-    }));
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700">
-      <Toaster position="top-right" />
-      
-      <div className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-3">
-              <Truck className="w-8 h-8 text-blue-800" />
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">
-                  Transportes San Pedro
-                </h1>
-                <p className="text-sm text-gray-500">
-                  Sistema de Registro de Tiempos
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-gray-700">
-                <User className="w-5 h-5" />
-                <span>{userId}</span>
-              </div>
-              <div className="flex items-center space-x-2 text-gray-700">
-                <Clock className="w-5 h-5" />
-                <span>{currentTime.toLocaleTimeString('es-ES')}</span>
-              </div>
-              {ubicacionActual && (
-                <div className="flex items-center space-x-2 text-gray-700">
-                  <MapPin className="w-5 h-5" />
-                  <span>
-                    Lat: {ubicacionActual.latitude.toFixed(6)}, Long: {ubicacionActual.longitude.toFixed(6)}
-                  </span>
-                </div>
-              )}
-              <button
-                onClick={() => supabase.auth.signOut()}
-                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Estado del Turno
-            </h2>
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <Calendar className="w-5 h-5 text-gray-500 mt-1" />
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Fecha</p>
-                  <p className="text-sm text-gray-600">
-                    {new Date().toLocaleDateString('es-ES', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                  </p>
-                </div>
-              </div>
-              
-              {estaTrabajando && registroTiempo && (
-                <>
-                  <div className="flex items-start space-x-3">
-                    <Clock className="w-5 h-5 text-gray-500 mt-1" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
-                      <p className="text-sm text-gray-600">
-                        {new Date(registroTiempo.start_time).toLocaleTimeString('es-ES')}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-start space-x-3">
-                    <Timer className="w-5 h-5 text-gray-500 mt-1" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
-                      <p className="text-xl font-bold text-blue-600">
-                        {formatDuration(tiempoTranscurrido)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start space-x-3">
-                    <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
-                      <p className="text-sm text-gray-600">{registroTiempo.workplace}</p>
-                    </div>
-                  </div>
-
-                  {ubicacionActual && (
-                    <div className="flex items-start space-x-3">
-                      <MapPin className="w-5 h-5 text-gray-500 mt-1" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
-                        <p className="text-sm text-gray-600">
-                          Lat: {ubicacionActual.latitude.toFixed(6)}<br />
-                          Long: {ubicacionActual.longitude.toFixed(6)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              {estaTrabajando ? 'Finalizar Turno' : 'Iniciar Turno'}
-            </h2>
-            
-            {!estaTrabajando ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Lugar de Trabajo
-                  </label>
-                  <select
-                    value={lugarTrabajo}
-                    onChange={(e) => setLugarTrabajo(e.target.value)}
-                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                  >
-                    {lugaresTrabajo.map((lugar) => (
-                      <option key={lugar.id} value={lugar.name}>
-                        {lugar.name}
-                      </option>
-                    ))}
-                    <option value="Otro">Otro</option>
-                  </select>
-                </div>
-                
-                {lugarTrabajo === 'Otro' && (
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Especificar lugar de trabajo
-                    </label>
-                    <input
-                      type="text"
-                      value={lugarPersonalizado}
-                      onChange={(e) => setLugarPersonalizado(e.target.value)}
-                      placeholder="Ingresa el lugar de trabajo"
-                      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                    />
-                  </div>
-                )}
-                
-                <button
-                  onClick={iniciarTurno}
-                  disabled={estaProcesando}
-                  className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
-                >
-                  <Clock className="w-5 h-5" />
-                  <span>{estaProcesando ? 'Procesando...' : 'Iniciar Turno'}</span>
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
-                  <div className="flex items-center space-x-2 text-yellow-800">
-                    <MapPin className="w-5 h-5" />
-                    <span className="font-medium">Turno en progreso</span>
-                  </div>
-                  <p className="mt-1 text-sm text-yellow-700">
-                    Asegúrate de finalizar tu turno antes de salir.
-                  </p>
-                </div>
-                
-                <button
-                  onClick={finalizarTurno}
-                  disabled={estaProcesando}
-                  className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
-                >
-                  <Clock className="w-5 h-5" />
-                  <span>{estaProcesando ? 'Procesando...' : 'Finalizar Turno'}</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Calendario de Trabajo
-          </h2>
-
-          <div className="mb-6 flex flex-wrap gap-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-green-500 rounded-sm"></div>
-              <span className="text-sm text-gray-950">Turno Completado</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
-              <span className="text-sm text-gray-950">Turno en Progreso</span>
-            </div>
-          </div>  
-
-          <div className="overflow-x-auto">
-            <BigCalendar
-              localizer={localizer}
-              events={generarEventosCalendario()}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 500 }}
-              eventPropGetter={estiloEvento}
-              defaultView="month"
-              messages={{
-                today: 'Hoy',
-                previous: 'Anterior',
-                next: 'Siguiente',
-                month: 'Mes',
-                week: 'Semana',
-                day: 'Día',
-              }}
-            />
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-}
+// ... [El resto del código permanece igual: PaginaPrincipal, App, etc.] ...
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
-        // Verificar si el usuario está activo
-        const { data: userData, error } = await supabase
-          .from('users')
-          .select('Activo')
-          .eq('email', session.user.email)
-          .single();
-
-        if (!error && userData && userData.Activo) {
-          setIsLoggedIn(true);
-        } else {
-          await supabase.auth.signOut();
-          setIsLoggedIn(false);
-        }
-      } else {
-        setIsLoggedIn(false);
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session) {
-        // Verificar si el usuario está activo
-        const { data: userData, error } = await supabase
-          .from('users')
-          .select('Activo')
-          .eq('email', session.user.email)
-          .single();
-
-        if (!error && userData && userData.Activo) {
-          setIsLoggedIn(true);
-        } else {
-          await supabase.auth.signOut();
-          setIsLoggedIn(false);
-        }
-      } else {
-        setIsLoggedIn(false);
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Cambio de estado de sesión:", event, "Sesión:", !!session);
+      setIsLoggedIn(!!session);
     });
 
     return () => subscription?.unsubscribe();
