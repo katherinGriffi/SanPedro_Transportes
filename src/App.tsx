@@ -337,6 +337,9 @@ useEffect(() => {
               <LogIn className="w-5 h-5 mr-2" />
               {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
+            <div style={{ color: "red", fontWeight: "bold", textAlign: "center" }}>
+            DEBUG: ¿Este texto aparece en producción?
+            </div>
             
             <div className="text-center pt-2">
               <button
