@@ -3,5 +3,10 @@ export default {
   theme: {
     extend: {},
   },
-  plugins: [], // Must be an array (even if empty)
+  plugins: [],
+  safelist: [
+    'text-blue-600',    // Clase del color del texto
+    'hover:text-blue-800',  // Clase del hover
+    'underline',        // Clase del subrayado
+  ],
 };
