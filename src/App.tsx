@@ -194,6 +194,12 @@ function IniciarSesion() {
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
+// eliminar 
+
+  useEffect(() => {
+    alert(`Entorno: ${import.meta.env.MODE}\nMostrar enlace: ${!showForgotPassword}`);
+  }, [showForgotPassword]);
+//
 
   const handleLogin = async (e) => {
     e.preventDefault();
