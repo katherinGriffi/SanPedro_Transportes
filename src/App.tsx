@@ -6,6 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import 'moment/locale/es';
 
 // Configuración del calendario
 const localizer = momentLocalizer(moment);
@@ -430,6 +431,266 @@ function GestionBoletas() {
   );
 }
 
+// Componente para Gestión de Días Libres
+function GestionDiasLibres() {
+  const [usuarios, setUsuarios] = useState([]);
+  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('');
+  const [diasLibres, setDiasLibres] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Cargar usuarios al montar el componente
+  useEffect(() => {
+    const cargarUsuarios = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, email, nombre, apellido')
+          .eq('activo', true)
+          .order('nombre', { ascending: true });
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setUsuarios(data);
+          setUsuarioSeleccionado(data[0].id);
+        }
+      } catch (error) {
+        console.error('Error cargando usuarios:', error);
+        toast.error('Error al cargar usuarios: ' + error.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    cargarUsuarios();
+  }, []);
+
+  // Cargar días libres cuando cambia el usuario seleccionado
+  useEffect(() => {
+    if (usuarioSeleccionado) {
+      cargarDiasLibres();
+    }
+  }, [usuarioSeleccionado]);
+
+  const cargarDiasLibres = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('dias_libres')
+        .select('*')
+        .eq('user_id', usuarioSeleccionado)
+        .order('fecha', { ascending: true });
+
+      if (error) throw error;
+
+      setDiasLibres(data || []);
+    } catch (error) {
+      console.error('Error cargando días libres:', error);
+      toast.error('Error al cargar días libres: ' + error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+  };
+
+  const agregarDiaLibre = async () => {
+    if (!usuarioSeleccionado || !selectedDate) {
+      toast.error('Selecciona un usuario y una fecha');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // Verificar si ya existe un día libre para esta fecha
+      const { data: existing, error: existingError } = await supabase
+        .from('dias_libres')
+        .select('id')
+        .eq('user_id', usuarioSeleccionado)
+        .eq('fecha', selectedDate.toISOString().split('T')[0])
+        .maybeSingle();
+
+      if (existingError) throw existingError;
+
+      if (existing) {
+        toast.error('Ya existe un día libre para esta fecha');
+        return;
+      }
+
+      // Insertar nuevo día libre
+      const { error } = await supabase
+        .from('dias_libres')
+        .insert([
+          {
+            user_id: usuarioSeleccionado,
+            fecha: selectedDate.toISOString().split('T')[0],
+            todo_el_dia: true
+          }
+        ]);
+
+      if (error) throw error;
+
+      toast.success('Día libre agregado correctamente');
+      await cargarDiasLibres();
+    } catch (error) {
+      console.error('Error agregando día libre:', error);
+      toast.error('Error al agregar día libre: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const eliminarDiaLibre = async (id) => {
+    if (!window.confirm('¿Estás seguro de eliminar este día libre?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('dias_libres')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast.success('Día libre eliminado correctamente');
+      await cargarDiasLibres();
+    } catch (error) {
+      console.error('Error eliminando día libre:', error);
+      toast.error('Error al eliminar día libre: ' + error.message);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+      <h2 className="text-lg font-semibold text-gray-900 mb-6">
+        Gestión de Días Libres
+      </h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="md:col-span-2">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Usuario
+            </label>
+            <select
+              value={usuarioSeleccionado}
+              onChange={(e) => setUsuarioSeleccionado(e.target.value)}
+              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+              disabled={isLoading}
+            >
+              {usuarios.map((usuario) => (
+                <option key={usuario.id} value={usuario.id}>
+                  {usuario.nombre} {usuario.apellido} ({usuario.email})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Calendario
+            </label>
+            <div className="border rounded-lg p-2">
+              <BigCalendar
+                localizer={localizer}
+                events={diasLibres.map(dia => ({
+                  title: 'Día Libre',
+                  start: new Date(dia.fecha),
+                  end: new Date(dia.fecha),
+                  allDay: true,
+                  resource: dia.id
+                }))}
+                startAccessor="start"
+                endAccessor="end"
+                style={{ height: 400 }}
+                defaultView="month"
+                selectable
+                onSelectSlot={({ start }) => handleDateChange(start)}
+                onSelectEvent={(event) => {
+                  if (window.confirm('¿Desea eliminar este día libre?')) {
+                    eliminarDiaLibre(event.resource);
+                  }
+                }}
+                messages={{
+                  today: 'Hoy',
+                  previous: 'Anterior',
+                  next: 'Siguiente',
+                  month: 'Mes',
+                  week: 'Semana',
+                  day: 'Día',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
+            <h3 className="font-medium text-blue-800 mb-2">Instrucciones</h3>
+            <p className="text-sm text-blue-700">
+              1. Selecciona un usuario de la lista<br />
+              2. Haz clic en una fecha del calendario<br />
+              3. Presiona "Agregar Día Libre"<br />
+              4. Para eliminar, haz clic en un día libre existente
+            </p>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <h3 className="font-medium text-gray-800 mb-2">Día seleccionado</h3>
+            <p className="text-lg font-semibold mb-4">
+              {selectedDate.toLocaleDateString('es-ES', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long', 
+                year: 'numeric' 
+              })}
+            </p>
+            <button
+              onClick={agregarDiaLibre}
+              disabled={isSubmitting}
+              className="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
+            >
+              <Calendar className="w-5 h-5 mr-2" />
+              {isSubmitting ? 'Procesando...' : 'Agregar Día Libre'}
+            </button>
+          </div>
+
+          <div className="mt-4">
+            <h3 className="font-medium text-gray-800 mb-2">Días libres programados</h3>
+            {diasLibres.length === 0 ? (
+              <p className="text-sm text-gray-500">No hay días libres programados</p>
+            ) : (
+              <ul className="divide-y divide-gray-200">
+                {diasLibres.map(dia => (
+                  <li key={dia.id} className="py-2 flex justify-between items-center">
+                    <span>
+                      {new Date(dia.fecha).toLocaleDateString('es-ES', { 
+                        day: 'numeric', 
+                        month: 'short' 
+                      })}
+                    </span>
+                    <button 
+                      onClick={() => eliminarDiaLibre(dia.id)}
+                      className="text-red-600 hover:text-red-800 text-sm"
+                    >
+                      Eliminar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Componente Principal
 function PaginaPrincipal() {
   const [userEmail, setUserEmail] = useState('');
@@ -447,6 +708,7 @@ function PaginaPrincipal() {
   const [todosRegistros, setTodosRegistros] = useState([]);
   const [lugaresTrabajo, setLugaresTrabajo] = useState([]);
   const [eventosCalendario, setEventosCalendario] = useState([]);
+  const [diasLibres, setDiasLibres] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('registro');
 
@@ -512,6 +774,7 @@ function PaginaPrincipal() {
         buscarUltimoRegistro(session.user.id);
         buscarTodosRegistros(session.user.id);
         buscarLugaresTrabajo();
+        buscarDiasLibres(session.user.id);
       } catch (error) {
         console.error('Error obteniendo sesión:', error);
         toast.error(error.message);
@@ -519,6 +782,22 @@ function PaginaPrincipal() {
     };
     getSession();
   }, []);
+
+  const buscarDiasLibres = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('dias_libres')
+        .select('*')
+        .eq('user_id', userId)
+        .order('fecha', { ascending: true });
+
+      if (error) throw error;
+
+      setDiasLibres(data || []);
+    } catch (error) {
+      console.error('Error cargando días libres:', error);
+    }
+  };
 
   const isAdminUser = () => {
     if (!userEmail) return false;
@@ -757,6 +1036,18 @@ function PaginaPrincipal() {
           
           <button
             className={`px-4 py-2 font-medium text-sm flex items-center ${
+              activeTab === 'dias-libres' 
+                ? 'border-b-2 border-blue-500 text-blue-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('dias-libres')}
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Días Libres
+          </button>
+          
+          <button
+            className={`px-4 py-2 font-medium text-sm flex items-center ${
               activeTab === 'dashboard' 
                 ? 'border-b-2 border-blue-500 text-blue-600' 
                 : 'text-gray-500 hover:text-gray-700'
@@ -780,6 +1071,12 @@ function PaginaPrincipal() {
           {activeTab === 'boletas' && (
             <div className="animate-fadeIn">
               <GestionBoletas />
+            </div>
+          )}
+          
+          {activeTab === 'dias-libres' && (
+            <div className="animate-fadeIn">
+              <GestionDiasLibres />
             </div>
           )}
           
@@ -960,16 +1257,43 @@ function PaginaPrincipal() {
             <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
             <span className="text-sm text-gray-950">Turno en Progreso</span>
           </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 bg-purple-500 rounded-sm"></div>
+            <span className="text-sm text-gray-950">Día Libre</span>
+          </div>
         </div>  
 
         <div className="overflow-x-auto">
           <BigCalendar
             localizer={localizer}
-            events={eventosCalendario}
+            events={[
+              ...eventosCalendario,
+              ...diasLibres.map(dia => ({
+                title: 'Día Libre',
+                start: new Date(dia.fecha),
+                end: new Date(dia.fecha),
+                allDay: true,
+                status: 'dia-libre'
+              }))
+            ]}
             startAccessor="start"
             endAccessor="end"
             style={{ height: 500 }}
-            eventPropGetter={estiloEvento}
+            eventPropGetter={(event) => {
+              if (event.status === 'dia-libre') {
+                return {
+                  style: {
+                    backgroundColor: '#6f42c1',
+                    borderRadius: '4px',
+                    color: 'white',
+                    border: 'none',
+                    padding: '2px 8px',
+                    fontSize: '14px',
+                  }
+                };
+              }
+              return estiloEvento(event);
+            }}
             defaultView="month"
             messages={{
               today: 'Hoy',
