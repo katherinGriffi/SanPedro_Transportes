@@ -4,6 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  base: '/SanPedro_Transportes/', // Añade esta línea con el nombre de tu repositorio
   server: {
     host: true,
     port: 5173,
