@@ -1334,7 +1334,7 @@ function PaginaPrincipal() {
                   <span className="font-medium">
                     {userName || userLastName ? 
                       `Hola, ${userName} ${userLastName}` : 
-                      `Bienvenido, ${userEmail}`}
+                      `Bienvenido!, ${userEmail}`}
                   </span>
                   <span className="text-xs text-gray-500">{userEmail}</span>
                 </div>
