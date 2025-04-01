@@ -4,7 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/SanPedro_Transportes/', // Añade esta línea con el nombre de tu repositorio
+  base: '/SanPedro_Transportes/', // Crucial for GitHub Pages
   server: {
     host: true,
     port: 5173,
@@ -17,6 +17,16 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    chunkSizeWarningLimit: 1600
+    chunkSizeWarningLimit: 1600,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html') // Explicit entry point
+      }
+    }
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src') // Optional but helpful for imports
+    }
   }
 })
