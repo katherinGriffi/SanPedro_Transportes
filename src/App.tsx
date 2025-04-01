@@ -476,18 +476,24 @@ function PaginaPrincipal() {
 
   useEffect(() => {
     const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('Sesión obtenida:', session); // Depuración
-      if (session?.user) {
-        const { data: userData } = await supabase
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session?.user) {
+          throw sessionError || new Error('No hay sesión activa');
+        }
+
+        const { data: userData, error: userError } = await supabase
           .from('users')
           .select('activo, email, nombre, apellido')
           .eq('id', session.user.id)
           .single();
-          console.log('Datos del usuario:', userData); // Depuración
-          console.log('Error al obtener usuario:', error); // Depuración
 
-        if (!userData?.activo) {
+        if (userError || !userData) {
+          throw userError || new Error('Error al obtener datos del usuario');
+        }
+
+        if (!userData.activo) {
           await supabase.auth.signOut();
           window.location.reload();
           return;
@@ -500,6 +506,9 @@ function PaginaPrincipal() {
         buscarUltimoRegistro(session.user.id);
         buscarTodosRegistros(session.user.id);
         buscarLugaresTrabajo();
+      } catch (error) {
+        console.error('Error obteniendo sesión:', error);
+        toast.error(error.message);
       }
     };
     getSession();
@@ -993,13 +1002,11 @@ function PaginaPrincipal() {
                 <User className="w-5 h-5" />
                 <div className="flex flex-col">
                   <span className="font-medium">
-                  {userName || userLastName ? (
-                  `Hola ${userName} ${userLastName}!`
-                   ) : (
-                   'Bienvenido!'
-                   )}
+                    {userName || userLastName ? 
+                      `Hola, ${userName} ${userLastName}` : 
+                      `Bienvenido, ${userEmail}`}
                   </span>
-                  
+                  <span className="text-xs text-gray-500">{userEmail}</span>
                 </div>
               </div>
               <div className="flex items-center space-x-2 text-gray-700">
@@ -1038,22 +1045,28 @@ function App() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        const { data: userData } = await supabase
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session?.user) {
+          setIsLoggedIn(false);
+          return;
+        }
+
+        const { data: userData, error: userError } = await supabase
           .from('users')
           .select('activo, nombre, apellido')
           .eq('id', session.user.id)
           .single();
         
-        if (!userData?.activo) {
+        if (userError || !userData?.activo) {
           await supabase.auth.signOut();
           setIsLoggedIn(false);
         } else {
           setIsLoggedIn(true);
         }
-      } else {
+      } catch (error) {
+        console.error('Error verificando autenticación:', error);
         setIsLoggedIn(false);
       }
     };
@@ -1062,13 +1075,13 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        const { data: userData } = await supabase
+        const { data: userData, error: userError } = await supabase
           .from('users')
           .select('activo, nombre, apellido')
           .eq('id', session.user.id)
           .single();
         
-        if (!userData?.activo) {
+        if (userError || !userData?.activo) {
           await supabase.auth.signOut();
           setIsLoggedIn(false);
         } else {
