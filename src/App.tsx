@@ -35,15 +35,20 @@ function IniciarSesion() {
     setIsLoading(true);
 
     try {
+      toast.dismiss();
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (authError || !user) {
-        throw authError || new Error('Credenciales inválidas');
+      if (authError) {
+        throw authError;
       }
-
+  
+      if (!user) {
+        throw new Error('No se recibió información del usuario');
+      }
+      // Verifica el estado del usuario
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('activo, nombre, apellido')
@@ -58,9 +63,10 @@ function IniciarSesion() {
         await supabase.auth.signOut();
         throw new Error('Tu cuenta no está activa. Contacta al administrador.');
       }
-
+      // Redirige después de autenticar
       navigate('/');
     } catch (error) {
+      console.error('Error en login:', error);
       toast.error(error.message);
     } finally {
       setIsLoading(false);
