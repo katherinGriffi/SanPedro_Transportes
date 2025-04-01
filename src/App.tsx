@@ -477,12 +477,15 @@ function PaginaPrincipal() {
   useEffect(() => {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('Sesión obtenida:', session); // Depuración
       if (session?.user) {
         const { data: userData } = await supabase
           .from('users')
           .select('activo, email, nombre, apellido')
           .eq('id', session.user.id)
           .single();
+          console.log('Datos del usuario:', userData); // Depuración
+          console.log('Error al obtener usuario:', error); // Depuración
 
         if (!userData?.activo) {
           await supabase.auth.signOut();
@@ -990,11 +993,13 @@ function PaginaPrincipal() {
                 <User className="w-5 h-5" />
                 <div className="flex flex-col">
                   <span className="font-medium">
-                    Hola {userName} {userLastName}!
+                  {userName || userLastName ? (
+                  `Hola ${userName} ${userLastName}!`
+                   ) : (
+                   'Bienvenido!'
+                   )}
                   </span>
-                  <span className="text-xs text-gray-500">
-                    Bienvenido :) !
-                  </span>
+                  
                 </div>
               </div>
               <div className="flex items-center space-x-2 text-gray-700">
