@@ -345,6 +345,7 @@ function IniciarSesion() {
     </div>
   );
 }
+
 function AppPrincipal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
