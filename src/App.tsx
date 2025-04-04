@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, FileText, Upload, Download } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import toast, { Toaster } from 'react-hot-toast';
@@ -49,21 +49,27 @@ function IniciarSesion() {
       if (!user) {
         throw new Error('No se recibió información del usuario');
       }
+      
       // Verifica el estado del usuario
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('activo, nombre, apellido')
+        .select('activo, email, nombre, apellido')
         .eq('id', user.id)
         .single();
 
       if (userError || !userData) {
-        throw new Error('Error al verificar el estado del usuario');
+        throw userError || new Error('Error al verificar el estado del usuario');
       }
 
       if (userData.activo !== true) {
         await supabase.auth.signOut();
         throw new Error('Tu cuenta no está activa. Contacta al administrador.');
       }
+      
+      // Limpiar caché antes de redirigir
+      localStorage.removeItem('sb-auth-token');
+      sessionStorage.removeItem('sb-auth-token');
+      
       // Redirige después de autenticar
       navigate('/');
     } catch (error) {
@@ -127,7 +133,90 @@ function IniciarSesion() {
   );
 }
 
-// Componente para Gestión de Boletas
+// Componente para visualización de boletas de usuarios no admin
+function MisBoletas({ userId }) {
+  const [boletas, setBoletas] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const cargarBoletas = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('boletas_pago')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        setBoletas(data || []);
+      } catch (error) {
+        console.error('Error cargando boletas:', error);
+        toast.error('Error al cargar tus boletas');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (userId) {
+      cargarBoletas();
+    }
+  }, [userId]);
+
+  const handleDownload = (url) => {
+    window.open(url, '_blank');
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+      <h2 className="text-lg font-semibold text-gray-900 mb-6">
+        Mis Boletas de Pago
+      </h2>
+
+      {isLoading ? (
+        <p className="text-sm text-gray-500">Cargando...</p>
+      ) : boletas.length === 0 ? (
+        <p className="text-sm text-gray-500">No hay boletas registradas.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Año</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mes</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha de Subida</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {boletas.map((boleta) => (
+                <tr key={boleta.id}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{boleta.ano}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {new Date(2000, boleta.mes - 1, 1).toLocaleString('es-ES', { month: 'long' })}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {new Date(boleta.created_at).toLocaleString('es-ES')}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <button
+                      onClick={() => handleDownload(boleta.arquivo_url)}
+                      className="text-blue-600 hover:text-blue-900 flex items-center"
+                    >
+                      <Download className="w-4 h-4 mr-1" /> Descargar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Componente para Gestión de Boletas (admin)
 function GestionBoletas() {
   const [usuarios, setUsuarios] = useState([]);
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('');
@@ -196,59 +285,62 @@ function GestionBoletas() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!usuarioSeleccionado || !archivo) {
-      toast.error('Selecciona un usuario y un archivo');
-      return;
-    }
-
     setIsUploading(true);
-
+  
     try {
-      const fileExt = archivo.name.split('.').pop();
-      const fileName = `${usuarioSeleccionado}_${ano}_${mes}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('boletas')
-        .upload(filePath, archivo);
-
-      if (uploadError) {
-        if (uploadError.message.includes('already exists')) {
-          const { error: updateError } = await supabase.storage
-            .from('boletas')
-            .update(filePath, archivo);
-          
-          if (updateError) throw updateError;
-        } else {
-          throw uploadError;
-        }
+      // 1. Verificar que el usuario es admin
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+  
+      if (userError || userData?.role !== 'admin') {
+        throw new Error('Solo los administradores pueden subir boletas');
       }
-
+  
+      // 2. Subir archivo (sin verificar el bucket - más eficiente)
+      const fileExt = archivo.name.split('.').pop();
+      const fileName = `${usuarioSeleccionado}/${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('boletas_pago')
+        .upload(fileName, archivo, {
+          cacheControl: '3600',
+          upsert: false
+        });
+  
+      if (uploadError) throw uploadError;
+  
+      // 3. Obtener URL pública
       const { data: { publicUrl } } = supabase.storage
-        .from('boletas')
-        .getPublicUrl(filePath);
-
+        .from('boletas_pago')
+        .getPublicUrl(fileName);
+  
+      // 4. Insertar en la tabla con verificación RLS
       const { error: insertError } = await supabase
         .from('boletas_pagos')
-        .upsert(
-          {
-            user_id: usuarioSeleccionado,
-            arquivo_url: publicUrl,
-            ano: ano,
-            mes: mes
-          },
-          { onConflict: ['user_id', 'ano', 'mes'] }
-        );
-
+        .insert({
+          user_id: usuarioSeleccionado,
+          arquivo_url: publicUrl,
+          ano: ano,
+          mes: mes,
+          uploaded_by: user.id
+        })
+        .select();  // Necesario para políticas RLS en inserts
+  
       if (insertError) throw insertError;
-
-      toast.success('Boleta subida correctamente');
+  
+      toast.success("¡Boleta subida correctamente!");
       setArchivo(null);
       await cargarBoletasUsuario();
+  
     } catch (error) {
-      console.error('Error subiendo boleta:', error);
-      toast.error('Error al subir la boleta: ' + error.message);
+      console.error('Error en handleSubmit:', error);
+      toast.error(error.message.includes('bucket') 
+        ? 'Error de configuración del bucket' 
+        : error.message);
     } finally {
       setIsUploading(false);
     }
@@ -262,10 +354,10 @@ function GestionBoletas() {
     if (!window.confirm('¿Estás seguro de eliminar esta boleta?')) return;
 
     try {
-      const filePath = url.split('/storage/v1/object/public/boletas/')[1];
+      const filePath = url.split('/storage/v1/object/public/boletas_pago/')[1];
       
       const { error: deleteError } = await supabase.storage
-        .from('boletas')
+        .from('boletas_pago')
         .remove([filePath]);
 
       if (deleteError && !deleteError.message.includes('not found')) {
@@ -430,6 +522,7 @@ function GestionBoletas() {
     </div>
   );
 }
+
 
 // Componente para Gestión de Días Libres
 function GestionDiasLibres() {
@@ -711,6 +804,7 @@ function PaginaPrincipal() {
   const [diasLibres, setDiasLibres] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('registro');
+  const [userActiveTab, setUserActiveTab] = useState('registro');
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1064,7 +1158,7 @@ function PaginaPrincipal() {
         <div className="transition-all duration-200">
           {activeTab === 'registro' && (
             <div className="animate-fadeIn">
-              {renderNormalContent()}
+              {renderNormalUserContent()}
             </div>
           )}
           
@@ -1099,215 +1193,247 @@ function PaginaPrincipal() {
     );
   };
 
-  const renderNormalContent = () => (
-    <>
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Estado del Turno
-          </h2>
-          <div className="space-y-4">
-            <div className="flex items-start space-x-3">
-              <Calendar className="w-5 h-5 text-gray-500 mt-1" />
-              <div>
-                <p className="text-sm font-medium text-gray-700">Fecha</p>
-                <p className="text-sm text-gray-600">
-                  {new Date().toLocaleDateString('es-ES', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </p>
-              </div>
-            </div>
-            
-            {estaTrabajando && registroTiempo && (
-              <>
+  const renderNormalUserContent = () => {
+    return (
+      <>
+        <div className="flex border-b border-gray-200 mb-6">
+          <button
+            className={`px-4 py-2 font-medium text-sm flex items-center ${
+              userActiveTab === 'registro' 
+                ? 'border-b-2 border-blue-500 text-blue-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setUserActiveTab('registro')}
+          >
+            <Clock className="w-4 h-4 mr-2" />
+            Registro de Tiempos
+          </button>
+          
+          <button
+            className={`px-4 py-2 font-medium text-sm flex items-center ${
+              userActiveTab === 'boletas' 
+                ? 'border-b-2 border-blue-500 text-blue-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setUserActiveTab('boletas')}
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Mis Boletas
+          </button>
+        </div>
+
+        {userActiveTab === 'registro' ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                Estado del Turno
+              </h2>
+              <div className="space-y-4">
                 <div className="flex items-start space-x-3">
-                  <Clock className="w-5 h-5 text-gray-500 mt-1" />
+                  <Calendar className="w-5 h-5 text-gray-500 mt-1" />
                   <div>
-                    <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
+                    <p className="text-sm font-medium text-gray-700">Fecha</p>
                     <p className="text-sm text-gray-600">
-                      {new Date(registroTiempo.start_time).toLocaleTimeString('es-ES')}
+                      {new Date().toLocaleDateString('es-ES', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
                     </p>
                   </div>
                 </div>
                 
-                <div className="flex items-start space-x-3">
-                  <Timer className="w-5 h-5 text-gray-500 mt-1" />
+                {estaTrabajando && registroTiempo && (
+                  <>
+                    <div className="flex items-start space-x-3">
+                      <Clock className="w-5 h-5 text-gray-500 mt-1" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
+                        <p className="text-sm text-gray-600">
+                          {new Date(registroTiempo.start_time).toLocaleTimeString('es-ES')}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start space-x-3">
+                      <Timer className="w-5 h-5 text-gray-500 mt-1" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
+                        <p className="text-xl font-bold text-blue-600">
+                          {formatDuration(tiempoTranscurrido)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-3">
+                      <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
+                        <p className="text-sm text-gray-600">{registroTiempo.workplace}</p>
+                      </div>
+                    </div>
+
+                    {ubicacionActual && (
+                      <div className="flex items-start space-x-3">
+                        <MapPin className="w-5 h-5 text-gray-500 mt-1" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
+                          <p className="text-sm text-gray-600">
+                            Lat: {ubicacionActual.latitude.toFixed(6)}<br />
+                            Long: {ubicacionActual.longitude.toFixed(6)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                {estaTrabajando ? 'Finalizar Turno' : 'Iniciar Turno'}
+              </h2>
+              
+              {!estaTrabajando ? (
+                <div className="space-y-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
-                    <p className="text-xl font-bold text-blue-600">
-                      {formatDuration(tiempoTranscurrido)}
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Lugar de Trabajo
+                    </label>
+                    <select
+                      value={lugarTrabajo}
+                      onChange={(e) => setLugarTrabajo(e.target.value)}
+                      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                    >
+                      {lugaresTrabajo.map((lugar) => (
+                        <option key={lugar.id} value={lugar.name}>
+                          {lugar.name}
+                        </option>
+                      ))}
+                      <option value="Otro">Otro</option>
+                    </select>
+                  </div>
+                  
+                  {lugarTrabajo === 'Otro' && (
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Especificar lugar de trabajo
+                      </label>
+                      <input
+                        type="text"
+                        value={lugarPersonalizado}
+                        onChange={(e) => setLugarPersonalizado(e.target.value)}
+                        placeholder="Ingresa el lugar de trabajo"
+                        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                      />
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={iniciarTurno}
+                    disabled={estaProcesando}
+                    className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+                  >
+                    <Clock className="w-5 h-5" />
+                    <span>{estaProcesando ? 'Procesando...' : 'Iniciar Turno'}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
+                    <div className="flex items-center space-x-2 text-yellow-800">
+                      <MapPin className="w-5 h-5" />
+                      <span className="font-medium">Turno en progreso</span>
+                    </div>
+                    <p className="mt-1 text-sm text-yellow-700">
+                      Asegúrate de finalizar tu turno antes de salir.
                     </p>
                   </div>
-                </div>
-
-                <div className="flex items-start space-x-3">
-                  <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
-                    <p className="text-sm text-gray-600">{registroTiempo.workplace}</p>
-                  </div>
-                </div>
-
-                {ubicacionActual && (
-                  <div className="flex items-start space-x-3">
-                    <MapPin className="w-5 h-5 text-gray-500 mt-1" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
-                      <p className="text-sm text-gray-600">
-                        Lat: {ubicacionActual.latitude.toFixed(6)}<br />
-                        Long: {ubicacionActual.longitude.toFixed(6)}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            {estaTrabajando ? 'Finalizar Turno' : 'Iniciar Turno'}
-          </h2>
-          
-          {!estaTrabajando ? (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Lugar de Trabajo
-                </label>
-                <select
-                  value={lugarTrabajo}
-                  onChange={(e) => setLugarTrabajo(e.target.value)}
-                  className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                >
-                  {lugaresTrabajo.map((lugar) => (
-                    <option key={lugar.id} value={lugar.name}>
-                      {lugar.name}
-                    </option>
-                  ))}
-                  <option value="Otro">Otro</option>
-                </select>
-              </div>
-              
-              {lugarTrabajo === 'Otro' && (
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Especificar lugar de trabajo
-                  </label>
-                  <input
-                    type="text"
-                    value={lugarPersonalizado}
-                    onChange={(e) => setLugarPersonalizado(e.target.value)}
-                    placeholder="Ingresa el lugar de trabajo"
-                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                  />
+                  
+                  <button
+                    onClick={finalizarTurno}
+                    disabled={estaProcesando}
+                    className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+                  >
+                    <Clock className="w-5 h-5" />
+                    <span>{estaProcesando ? 'Procesando...' : 'Finalizar Turno'}</span>
+                  </button>
                 </div>
               )}
-              
-              <button
-                onClick={iniciarTurno}
-                disabled={estaProcesando}
-                className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
-              >
-                <Clock className="w-5 h-5" />
-                <span>{estaProcesando ? 'Procesando...' : 'Iniciar Turno'}</span>
-              </button>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
-                <div className="flex items-center space-x-2 text-yellow-800">
-                  <MapPin className="w-5 h-5" />
-                  <span className="font-medium">Turno en progreso</span>
-                </div>
-                <p className="mt-1 text-sm text-yellow-700">
-                  Asegúrate de finalizar tu turno antes de salir.
-                </p>
-              </div>
-              
-              <button
-                onClick={finalizarTurno}
-                disabled={estaProcesando}
-                className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
-              >
-                <Clock className="w-5 h-5" />
-                <span>{estaProcesando ? 'Procesando...' : 'Finalizar Turno'}</span>
-              </button>
+          </div>
+        ) : (
+          <MisBoletas userId={userId} />
+        )}
+
+        <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Calendario de Trabajo
+          </h2>
+
+          <div className="mb-6 flex flex-wrap gap-4">
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-green-500 rounded-sm"></div>
+              <span className="text-sm text-gray-950">Turno Completado</span>
             </div>
-          )}
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
+              <span className="text-sm text-gray-950">Turno en Progreso</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-purple-500 rounded-sm"></div>
+              <span className="text-sm text-gray-950">Día Libre</span>
+            </div>
+          </div>  
+
+          <div className="overflow-x-auto">
+            <BigCalendar
+              localizer={localizer}
+              events={[
+                ...eventosCalendario,
+                ...diasLibres.map(dia => ({
+                  title: 'Día Libre',
+                  start: new Date(dia.fecha),
+                  end: new Date(dia.fecha),
+                  allDay: true,
+                  status: 'dia-libre'
+                }))
+              ]}
+              startAccessor="start"
+              endAccessor="end"
+              style={{ height: 500 }}
+              eventPropGetter={(event) => {
+                if (event.status === 'dia-libre') {
+                  return {
+                    style: {
+                      backgroundColor: '#6f42c1',
+                      borderRadius: '4px',
+                      color: 'white',
+                      border: 'none',
+                      padding: '2px 8px',
+                      fontSize: '14px',
+                    }
+                  };
+                }
+                return estiloEvento(event);
+              }}
+              defaultView="month"
+              messages={{
+                today: 'Hoy',
+                previous: 'Anterior',
+                next: 'Siguiente',
+                month: 'Mes',
+                week: 'Semana',
+                day: 'Día',
+              }}
+            />
+          </div>
         </div>
-      </div>
-
-      <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Calendario de Trabajo
-        </h2>
-
-        <div className="mb-6 flex flex-wrap gap-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-green-500 rounded-sm"></div>
-            <span className="text-sm text-gray-950">Turno Completado</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
-            <span className="text-sm text-gray-950">Turno en Progreso</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-purple-500 rounded-sm"></div>
-            <span className="text-sm text-gray-950">Día Libre</span>
-          </div>
-        </div>  
-
-        <div className="overflow-x-auto">
-          <BigCalendar
-            localizer={localizer}
-            events={[
-              ...eventosCalendario,
-              ...diasLibres.map(dia => ({
-                title: 'Día Libre',
-                start: new Date(dia.fecha),
-                end: new Date(dia.fecha),
-                allDay: true,
-                status: 'dia-libre'
-              }))
-            ]}
-            startAccessor="start"
-            endAccessor="end"
-            style={{ height: 500 }}
-            eventPropGetter={(event) => {
-              if (event.status === 'dia-libre') {
-                return {
-                  style: {
-                    backgroundColor: '#6f42c1',
-                    borderRadius: '4px',
-                    color: 'white',
-                    border: 'none',
-                    padding: '2px 8px',
-                    fontSize: '14px',
-                  }
-                };
-              }
-              return estiloEvento(event);
-            }}
-            defaultView="month"
-            messages={{
-              today: 'Hoy',
-              previous: 'Anterior',
-              next: 'Siguiente',
-              month: 'Mes',
-              week: 'Semana',
-              day: 'Día',
-            }}
-          />
-        </div>
-      </div>
-    </>
-  );
+      </>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700">
@@ -1352,7 +1478,11 @@ function PaginaPrincipal() {
                 </div>
               )}
               <button
-                onClick={() => supabase.auth.signOut()}
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  localStorage.removeItem('sb-auth-token');
+                  sessionStorage.removeItem('sb-auth-token');
+                }}
                 className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <LogOut className="w-5 h-5" />
@@ -1363,7 +1493,7 @@ function PaginaPrincipal() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {isAdminUser() ? renderAdminContent() : renderNormalContent()}
+        {isAdminUser() ? renderAdminContent() : renderNormalUserContent()}
       </main>
     </div>
   );
@@ -1374,6 +1504,29 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
+    const cleanCache = async () => {
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (const registration of registrations) {
+            await registration.unregister();
+          }
+          const cacheNames = await caches.keys();
+          await Promise.all(
+            cacheNames.map(cacheName => caches.delete(cacheName))
+          );
+        } catch (error) {
+          console.error('Error limpiando caché:', error);
+        }
+      }
+
+      // Limpiar autenticación previa
+      localStorage.removeItem('sb-auth-token');
+      sessionStorage.removeItem('sb-auth-token');
+    };
+    
+    cleanCache();
+
     const checkAuth = async () => {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -1430,6 +1583,7 @@ function App() {
       <Toaster position="top-right" />
       <Routes>
         <Route path="/" element={isLoggedIn ? <PaginaPrincipal /> : <IniciarSesion />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
