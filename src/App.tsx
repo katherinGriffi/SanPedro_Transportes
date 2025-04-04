@@ -525,59 +525,91 @@ function GestionBoletas() {
 // Componente para Gestión de Días Libres
 function GestionDiasLibres() {
   const [usuarios, setUsuarios] = useState([]);
-  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('');
-  const [diasLibres, setDiasLibres] = useState([]);
+  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('todos');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sedes, setSedes] = useState([]);
+  const [sedeSeleccionada, setSedeSeleccionada] = useState('');
+  const [todosDiasLibres, setTodosDiasLibres] = useState([]);
+  const [modoAsignacion, setModoAsignacion] = useState(false);
+  const [usuarioParaAsignar, setUsuarioParaAsignar] = useState('');
 
-  // Cargar usuarios al montar el componente
+  // Cargar sedes y usuarios al montar el componente
   useEffect(() => {
-    const cargarUsuarios = async () => {
+    const cargarDatosIniciales = async () => {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase
+        const { data: usuariosData, error: usuariosError } = await supabase
           .from('users')
-          .select('id, email, nombre, apellido')
+          .select('id, email, nombre, apellido, sede, area, activo')
           .eq('activo', true)
+          .neq('area', 'admin')
           .order('nombre', { ascending: true });
 
-        if (error) throw error;
+        if (usuariosError) throw usuariosError;
 
-        if (data && data.length > 0) {
-          setUsuarios(data);
-          setUsuarioSeleccionado(data[0].id);
+        if (usuariosData && usuariosData.length > 0) {
+          setUsuarios(usuariosData);
+          
+          const sedesUnicas = [...new Set(usuariosData.map(u => u.sede))]
+            .filter(sede => sede)
+            .map(sede => ({ id: sede, nombre: sede }));
+          
+          setSedes(sedesUnicas);
+          
+          if (sedesUnicas.length > 0) {
+            setSedeSeleccionada(sedesUnicas[0].id);
+          }
         }
       } catch (error) {
-        console.error('Error cargando usuarios:', error);
-        toast.error('Error al cargar usuarios: ' + error.message);
+        console.error('Error cargando datos iniciales:', error);
+        toast.error('Error al cargar datos iniciales: ' + error.message);
       } finally {
         setIsLoading(false);
       }
     };
 
-    cargarUsuarios();
+    cargarDatosIniciales();
   }, []);
 
-  // Cargar días libres cuando cambia el usuario seleccionado
+  // Cargar días libres cuando cambia la sede o usuario seleccionado
   useEffect(() => {
-    if (usuarioSeleccionado) {
-      cargarDiasLibres();
+    if (sedeSeleccionada) {
+      cargarDiasLibresFiltrados();
     }
-  }, [usuarioSeleccionado]);
+  }, [sedeSeleccionada, usuarioSeleccionado]);
 
-  const cargarDiasLibres = async () => {
+  const cargarDiasLibresFiltrados = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      
+      let userIds = usuarios
+        .filter(u => u.sede === sedeSeleccionada)
+        .map(u => u.id);
+      
+      if (usuarioSeleccionado !== 'todos') {
+        userIds = userIds.filter(id => id === usuarioSeleccionado);
+      }
+
+      if (userIds.length === 0) {
+        setTodosDiasLibres([]);
+        return;
+      }
+
+      // Consulta para obtener días libres con información de usuario
+      const { data: diasData, error: diasError } = await supabase
         .from('dias_libres')
-        .select('*')
-        .eq('user_id', usuarioSeleccionado)
+        .select(`
+          *,
+          users!dias_libres_user_id_fkey(id, nombre, apellido, sede, area)
+        `)
+        .in('user_id', userIds)
         .order('fecha', { ascending: true });
 
-      if (error) throw error;
+      if (diasError) throw diasError;
 
-      setDiasLibres(data || []);
+      setTodosDiasLibres(diasData || []);
     } catch (error) {
       console.error('Error cargando días libres:', error);
       toast.error('Error al cargar días libres: ' + error.message);
@@ -588,10 +620,11 @@ function GestionDiasLibres() {
 
   const handleDateChange = (date) => {
     setSelectedDate(date);
+    setModoAsignacion(true);
   };
 
   const agregarDiaLibre = async () => {
-    if (!usuarioSeleccionado || !selectedDate) {
+    if (!usuarioParaAsignar || !selectedDate) {
       toast.error('Selecciona un usuario y una fecha');
       return;
     }
@@ -599,36 +632,38 @@ function GestionDiasLibres() {
     setIsSubmitting(true);
 
     try {
-      // Verificar si ya existe un día libre para esta fecha
+      // Verificar si ya existe un día libre para esta fecha y usuario
+      const fechaFormateada = selectedDate.toISOString().split('T')[0];
+      
       const { data: existing, error: existingError } = await supabase
         .from('dias_libres')
         .select('id')
-        .eq('user_id', usuarioSeleccionado)
-        .eq('fecha', selectedDate.toISOString().split('T')[0])
+        .eq('user_id', usuarioParaAsignar)
+        .eq('fecha', fechaFormateada)
         .maybeSingle();
 
       if (existingError) throw existingError;
 
       if (existing) {
-        toast.error('Ya existe un día libre para esta fecha');
+        toast.error('Este usuario ya tiene un día libre para esta fecha');
         return;
       }
 
       // Insertar nuevo día libre
       const { error } = await supabase
         .from('dias_libres')
-        .insert([
-          {
-            user_id: usuarioSeleccionado,
-            fecha: selectedDate.toISOString().split('T')[0],
-            todo_el_dia: true
-          }
-        ]);
+        .insert([{
+          user_id: usuarioParaAsignar,
+          fecha: fechaFormateada,
+          todo_el_dia: true
+        }]);
 
       if (error) throw error;
 
       toast.success('Día libre agregado correctamente');
-      await cargarDiasLibres();
+      await cargarDiasLibresFiltrados();
+      setModoAsignacion(false);
+      setUsuarioParaAsignar('');
     } catch (error) {
       console.error('Error agregando día libre:', error);
       toast.error('Error al agregar día libre: ' + error.message);
@@ -649,11 +684,77 @@ function GestionDiasLibres() {
       if (error) throw error;
 
       toast.success('Día libre eliminado correctamente');
-      await cargarDiasLibres();
+      await cargarDiasLibresFiltrados();
     } catch (error) {
       console.error('Error eliminando día libre:', error);
       toast.error('Error al eliminar día libre: ' + error.message);
     }
+  };
+
+  // Generar colores únicos para cada usuario
+  const generarColorUsuario = (userId) => {
+    const hash = userId.split('').reduce((acc, char) => {
+      return char.charCodeAt(0) + ((acc << 5) - acc);
+    }, 0);
+    return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`;
+  };
+
+  // Preparar eventos para el calendario
+  const prepararEventos = () => {
+    return todosDiasLibres.map(dia => {
+      const usuario = dia.users || { nombre: 'Desconocido', apellido: '' };
+      return {
+        id: dia.id,
+        title: `${usuario.nombre} ${usuario.apellido}`,
+        start: new Date(dia.fecha),
+        end: new Date(dia.fecha),
+        allDay: true,
+        resource: dia,
+        color: generarColorUsuario(dia.user_id)
+      };
+    });
+  };
+
+  // Estilo personalizado para eventos
+  const eventStyleGetter = (event) => {
+    return {
+      style: {
+        backgroundColor: event.color,
+        borderRadius: '4px',
+        color: 'white',
+        border: '0px',
+        display: 'block',
+        fontSize: '12px',
+        padding: '2px 5px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }
+    };
+  };
+
+  // Crear leyenda de usuarios
+  const crearLeyendaUsuarios = () => {
+    const usuariosConDiasLibres = [...new Set(
+      todosDiasLibres
+        .filter(dia => dia.users)
+        .map(dia => dia.users)
+    )];
+
+    return (
+      <div className="flex flex-wrap gap-2 mb-4">
+        {usuariosConDiasLibres.map(usuario => (
+          <div key={usuario.id} className="flex items-center">
+            <div 
+              className="w-4 h-4 rounded-full mr-2" 
+              style={{ backgroundColor: generarColorUsuario(usuario.id) }}
+            />
+            <span className="text-sm">
+              {usuario.nombre} {usuario.apellido}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -664,58 +765,90 @@ function GestionDiasLibres() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Usuario
-            </label>
-            <select
-              value={usuarioSeleccionado}
-              onChange={(e) => setUsuarioSeleccionado(e.target.value)}
-              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-              disabled={isLoading}
-            >
-              {usuarios.map((usuario) => (
-                <option key={usuario.id} value={usuario.id}>
-                  {usuario.nombre} {usuario.apellido} ({usuario.email})
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Sede
+              </label>
+              <select
+                value={sedeSeleccionada}
+                onChange={(e) => setSedeSeleccionada(e.target.value)}
+                className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                disabled={isLoading || sedes.length === 0}
+              >
+                {sedes.map((sede) => (
+                  <option key={sede.id} value={sede.id}>{sede.nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Usuario
+              </label>
+              <select
+                value={usuarioSeleccionado}
+                onChange={(e) => setUsuarioSeleccionado(e.target.value)}
+                className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                disabled={isLoading}
+              >
+                <option value="todos">Todos los usuarios</option>
+                {usuarios
+                  .filter(u => u.sede === sedeSeleccionada)
+                  .map((usuario) => (
+                    <option key={usuario.id} value={usuario.id}>
+                      {usuario.nombre} {usuario.apellido}
+                    </option>
+                  ))}
+              </select>
+            </div>
           </div>
+
+          {/* Leyenda de usuarios */}
+          {todosDiasLibres.length > 0 && crearLeyendaUsuarios()}
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Calendario
+              Calendario de Días Libres
             </label>
             <div className="border rounded-lg p-2">
-              <BigCalendar
-                localizer={localizer}
-                events={diasLibres.map(dia => ({
-                  title: 'Día Libre',
-                  start: new Date(dia.fecha),
-                  end: new Date(dia.fecha),
-                  allDay: true,
-                  resource: dia.id
-                }))}
-                startAccessor="start"
-                endAccessor="end"
-                style={{ height: 400 }}
-                defaultView="month"
-                selectable
-                onSelectSlot={({ start }) => handleDateChange(start)}
-                onSelectEvent={(event) => {
-                  if (window.confirm('¿Desea eliminar este día libre?')) {
-                    eliminarDiaLibre(event.resource);
-                  }
-                }}
-                messages={{
-                  today: 'Hoy',
-                  previous: 'Anterior',
-                  next: 'Siguiente',
-                  month: 'Mes',
-                  week: 'Semana',
-                  day: 'Día',
-                }}
-              />
+              {isLoading ? (
+                <div className="flex justify-center items-center h-96">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+              ) : (
+                <BigCalendar
+                  localizer={localizer}
+                  events={prepararEventos()}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height: 500 }}
+                  defaultView="month"
+                  selectable
+                  onSelectSlot={({ start }) => handleDateChange(start)}
+                  onSelectEvent={(event) => {
+                    if (window.confirm(`¿Eliminar día libre de ${event.title}?`)) {
+                      eliminarDiaLibre(event.id);
+                    }
+                  }}
+                  eventPropGetter={eventStyleGetter}
+                  messages={{
+                    today: 'Hoy',
+                    previous: 'Anterior',
+                    next: 'Siguiente',
+                    month: 'Mes',
+                    week: 'Semana',
+                    day: 'Día',
+                  }}
+                  components={{
+                    event: ({ event }) => (
+                      <div className="p-1 truncate">
+                        {event.title}
+                      </div>
+                    )
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -724,45 +857,88 @@ function GestionDiasLibres() {
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
             <h3 className="font-medium text-blue-800 mb-2">Instrucciones</h3>
             <p className="text-sm text-blue-700">
-              1. Selecciona un usuario de la lista<br />
-              2. Haz clic en una fecha del calendario<br />
-              3. Presiona "Agregar Día Libre"<br />
-              4. Para eliminar, haz clic en un día libre existente
+              1. Selecciona una sede y usuario (o "Todos")<br />
+              2. Los días libres aparecen en el calendario<br />
+              3. Haz clic en una fecha para asignar día libre<br />
+              4. Selecciona usuario y confirma<br />
+              5. Haz clic en un día existente para eliminarlo
             </p>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="font-medium text-gray-800 mb-2">Día seleccionado</h3>
-            <p className="text-lg font-semibold mb-4">
-              {selectedDate.toLocaleDateString('es-ES', { 
-                weekday: 'long', 
-                day: 'numeric', 
-                month: 'long', 
-                year: 'numeric' 
-              })}
-            </p>
-            <button
-              onClick={agregarDiaLibre}
-              disabled={isSubmitting}
-              className="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
-            >
-              <Calendar className="w-5 h-5 mr-2" />
-              {isSubmitting ? 'Procesando...' : 'Agregar Día Libre'}
-            </button>
-          </div>
+          {modoAsignacion ? (
+            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+              <h3 className="font-medium text-gray-800 mb-2">Asignar Día Libre</h3>
+              <p className="text-lg font-semibold mb-2">
+                {selectedDate.toLocaleDateString('es-ES', { 
+                  weekday: 'long', 
+                  day: 'numeric', 
+                  month: 'long', 
+                  year: 'numeric' 
+                })}
+              </p>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Seleccionar Usuario
+                </label>
+                <select
+                  value={usuarioParaAsignar}
+                  onChange={(e) => setUsuarioParaAsignar(e.target.value)}
+                  className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                >
+                  <option value="">Selecciona un usuario</option>
+                  {usuarios
+                    .filter(u => u.sede === sedeSeleccionada)
+                    .map((usuario) => (
+                      <option key={usuario.id} value={usuario.id}>
+                        {usuario.nombre} {usuario.apellido} ({usuario.area})
+                      </option>
+                    ))}
+                </select>
+              </div>
 
-          <div className="mt-4">
-            <h3 className="font-medium text-gray-800 mb-2">Días libres programados</h3>
-            {diasLibres.length === 0 ? (
-              <p className="text-sm text-gray-500">No hay días libres programados</p>
-            ) : (
-              <ul className="divide-y divide-gray-200">
-                {diasLibres.map(dia => (
+              <div className="flex space-x-2">
+                <button
+                  onClick={agregarDiaLibre}
+                  disabled={isSubmitting || !usuarioParaAsignar}
+                  className="flex-1 bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Asignando...' : 'Confirmar Día Libre'}
+                </button>
+                <button
+                  onClick={() => setModoAsignacion(false)}
+                  className="flex-1 bg-gray-200 text-gray-800 p-3 rounded-lg hover:bg-gray-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+              <h3 className="font-medium text-gray-800 mb-2">Resumen</h3>
+              <p className="text-sm text-gray-600">
+                Usuarios en la sede: {usuarios.filter(u => u.sede === sedeSeleccionada).length}<br />
+                Días libres este mes: {todosDiasLibres.filter(dia => {
+                  const fecha = new Date(dia.fecha);
+                  const hoy = new Date();
+                  return fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear();
+                }).length}
+              </p>
+            </div>
+          )}
+
+          {usuarioSeleccionado !== 'todos' && todosDiasLibres.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <h3 className="font-medium text-gray-800 mb-2">Días libres del usuario</h3>
+              <ul className="divide-y divide-gray-200 max-h-60 overflow-y-auto">
+                {todosDiasLibres.map(dia => (
                   <li key={dia.id} className="py-2 flex justify-between items-center">
                     <span>
                       {new Date(dia.fecha).toLocaleDateString('es-ES', { 
+                        weekday: 'short',
                         day: 'numeric', 
-                        month: 'short' 
+                        month: 'short',
+                        year: 'numeric'
                       })}
                     </span>
                     <button 
@@ -774,8 +950,8 @@ function GestionDiasLibres() {
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
