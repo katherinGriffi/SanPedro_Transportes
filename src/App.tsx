@@ -142,7 +142,7 @@ function MisBoletas({ userId }) {
     const cargarBoletas = async () => {
       try {
         const { data, error } = await supabase
-          .from('boletas_pago')
+          .from('boletas-pago')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
@@ -263,13 +263,12 @@ function GestionBoletas() {
   const cargarBoletasUsuario = async () => {
     try {
       const { data, error } = await supabase
-        .from('boletas_pagos')
+        .from('boletas_usuarios')  // Cambiado a la tabla correcta
         .select('*')
         .eq('user_id', usuarioSeleccionado)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-
       setBoletasExistentes(data || []);
     } catch (error) {
       console.error('Error cargando boletas:', error);
@@ -288,59 +287,57 @@ function GestionBoletas() {
     setIsUploading(true);
   
     try {
-      // 1. Verificar que el usuario es admin
+      // 1. Verificar permisos de admin
       const { data: { user } } = await supabase.auth.getUser();
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
         .eq('id', user.id)
         .single();
-  
+
       if (userError || userData?.role !== 'admin') {
         throw new Error('Solo los administradores pueden subir boletas');
       }
-  
-      // 2. Subir archivo (sin verificar el bucket - más eficiente)
+
+      // 2. Subir archivo al bucket (con nombre organizado)
       const fileExt = archivo.name.split('.').pop();
-      const fileName = `${usuarioSeleccionado}/${Date.now()}.${fileExt}`;
+      const fileName = `${usuarioSeleccionado}/${ano}-${mes}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
-        .from('boletas_pago')
+        .from('boletas-pago')  // Nombre correcto del bucket
         .upload(fileName, archivo, {
           cacheControl: '3600',
-          upsert: false
+          upsert: true  // Permite sobreescribir si ya existe
         });
-  
+
       if (uploadError) throw uploadError;
-  
+
       // 3. Obtener URL pública
       const { data: { publicUrl } } = supabase.storage
-        .from('boletas_pago')
+        .from('boletas-pago')
         .getPublicUrl(fileName);
-  
-      // 4. Insertar en la tabla con verificación RLS
+        
+
+      // 4. Registrar en la tabla de boletas
       const { error: insertError } = await supabase
-        .from('boletas_pagos')
-        .insert({
+        .from('boletas_usuarios')  // Tabla correcta
+        .upsert({  // Usamos upsert para actualizar si ya existe
           user_id: usuarioSeleccionado,
-          arquivo_url: publicUrl,
-          ano: ano,
           mes: mes,
+          ano: ano,
+          arquivo_url: publicUrl,
           uploaded_by: user.id
         })
-        .select();  // Necesario para políticas RLS en inserts
-  
+        .select();
+
       if (insertError) throw insertError;
-  
-      toast.success("¡Boleta subida correctamente!");
+
+      toast.success("¡Boleta subida/actualizada correctamente!");
       setArchivo(null);
       await cargarBoletasUsuario();
-  
     } catch (error) {
       console.error('Error en handleSubmit:', error);
-      toast.error(error.message.includes('bucket') 
-        ? 'Error de configuración del bucket' 
-        : error.message);
+      toast.error(error.message);
     } finally {
       setIsUploading(false);
     }
@@ -354,18 +351,19 @@ function GestionBoletas() {
     if (!window.confirm('¿Estás seguro de eliminar esta boleta?')) return;
 
     try {
-      const filePath = url.split('/storage/v1/object/public/boletas_pago/')[1];
+      // Extraer la ruta del archivo desde la URL
+      const filePath = url.split('/storage/v1/object/public/boletas-pago/')[1];
       
+      // Eliminar del storage
       const { error: deleteError } = await supabase.storage
-        .from('boletas_pago')
+        .from('boletas-pago')
         .remove([filePath]);
 
-      if (deleteError && !deleteError.message.includes('not found')) {
-        throw deleteError;
-      }
+      if (deleteError) throw deleteError;
 
+      // Eliminar el registro de la tabla
       const { error: deleteRecordError } = await supabase
-        .from('boletas_pagos')
+        .from('boletas_usuarios')
         .delete()
         .eq('id', id);
 
@@ -1507,49 +1505,66 @@ function App() {
     const cleanCache = async () => {
       if ('serviceWorker' in navigator) {
         try {
+          // Desregistrar service workers
           const registrations = await navigator.serviceWorker.getRegistrations();
-          for (const registration of registrations) {
-            await registration.unregister();
-          }
+          await Promise.all(registrations.map(r => {
+            console.log('Unregistering service worker:', r.scope);
+            return r.unregister();
+          }));
+    
+          // Limpiar cachés
           const cacheNames = await caches.keys();
-          await Promise.all(
-            cacheNames.map(cacheName => caches.delete(cacheName))
-          );
+          console.log('Deleting caches:', cacheNames);
+          await Promise.all(cacheNames.map(name => {
+            console.log('Deleting cache:', name);
+            return caches.delete(name);
+          }));
+    
+          // Forzar recarga para asegurar que todo está limpio
+          if (registrations.length > 0 || cacheNames.length > 0) {
+            window.location.reload(true);
+          }
         } catch (error) {
-          console.error('Error limpiando caché:', error);
+          console.error('Error cleaning cache:', error);
         }
       }
-
+    
       // Limpiar autenticación previa
       localStorage.removeItem('sb-auth-token');
       sessionStorage.removeItem('sb-auth-token');
+      document.cookie.split(';').forEach(c => {
+        document.cookie = c.replace(/^ +/, '').replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
+      });
     };
     
     cleanCache();
 
     const checkAuth = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        // Forzar una nueva sesión omitiendo caché
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession({
+          forceRefresh: true // Esto evita usar caché de autenticación
+        });
         
         if (sessionError || !session?.user) {
           setIsLoggedIn(false);
           return;
         }
-
+    
         const { data: userData, error: userError } = await supabase
           .from('users')
           .select('activo, nombre, apellido')
           .eq('id', session.user.id)
-          .single();
-        
-        if (userError || !userData?.activo) {
+          .single()
+          .throwOnError(); // Esto lanzará el error si lo hay
+          
+        setIsLoggedIn(!!userData?.activo);
+        if (!userData?.activo) {
           await supabase.auth.signOut();
-          setIsLoggedIn(false);
-        } else {
-          setIsLoggedIn(true);
         }
       } catch (error) {
-        console.error('Error verificando autenticación:', error);
+        console.error('Auth check error:', error);
+        await supabase.auth.signOut();
         setIsLoggedIn(false);
       }
     };
