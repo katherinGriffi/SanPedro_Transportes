@@ -1620,10 +1620,10 @@ function PaginaPrincipal() {
               <Truck className="w-8 h-8 text-blue-800" />
               <div>
                 <h1 className="text-xl font-bold text-gray-900">
-                  Transportes San Pedro
+                  Transportes San Pedro 
                 </h1>
                 <p className="text-sm text-gray-500">
-                  Sistema de Registro de Tiempos
+                  Sistema San Pedro
                 </p>
               </div>
             </div>
