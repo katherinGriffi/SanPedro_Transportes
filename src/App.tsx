@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
+import './index.css'; 
 import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, FileText, Upload, Download } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import toast, { Toaster } from 'react-hot-toast';

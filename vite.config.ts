@@ -4,7 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/SanPedro_Transportes/', // Crucial for GitHub Pages
+  base: '/SanPedro_Transportes/',
   server: {
     host: true,
     port: 5173,
@@ -20,13 +20,13 @@ export default defineConfig({
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'index.html') // Explicit entry point
+        main: path.resolve(__dirname, 'index.html')
       }
     }
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src') // Optional but helpful for imports
+      '@': path.resolve(__dirname, './src')
     }
   }
 })
