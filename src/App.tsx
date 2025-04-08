@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import './index.css'; 
-import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, FileText, Upload, Download } from 'lucide-react';
+import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, FileText, Upload, Download, Table2Icon, Table, PanelsTopLeft, PersonStanding, PersonStandingIcon } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import toast, { Toaster } from 'react-hot-toast';
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
@@ -17,7 +16,6 @@ moment.locale('es', {
   weekdays: 'Domingo_Lunes_Martes_Miércoles_Jueves_Viernes_Sábado'.split('_')
 });
 
-// Función para formatar duración
 function formatDuration(milliseconds) {
   const seconds = Math.floor(milliseconds / 1000);
   const hours = Math.floor(seconds / 3600);
@@ -26,7 +24,6 @@ function formatDuration(milliseconds) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
-// Componente de Login
 function IniciarSesion() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,43 +33,38 @@ function IniciarSesion() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-
+  
     try {
+      // Limpiar caché y tokens antes de iniciar sesión
+      await supabase.auth.signOut();  // Cerrar sesión si hay sesión activa previamente
+      localStorage.removeItem('sb-auth-token');
+      sessionStorage.removeItem('sb-auth-token');
+      
+      // Intentar iniciar sesión con el nuevo usuario
       toast.dismiss();
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
-      if (authError) {
-        throw authError;
-      }
   
-      if (!user) {
-        throw new Error('No se recibió información del usuario');
-      }
+      // Verificar si ocurrió algún error en la autenticación
+      if (authError) throw authError;
+      if (!user) throw new Error('No se recibió información del usuario');
       
-      // Verifica el estado del usuario
+      // Verificar los datos del usuario en la base de datos
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('activo, email, nombre, apellido')
         .eq('id', user.id)
         .single();
-
-      if (userError || !userData) {
-        throw userError || new Error('Error al verificar el estado del usuario');
-      }
-
+  
+      if (userError || !userData) throw userError || new Error('Error al verificar el estado del usuario');
       if (userData.activo !== true) {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut(); // Cerrar sesión si la cuenta no está activa
         throw new Error('Tu cuenta no está activa. Contacta al administrador.');
       }
       
-      // Limpiar caché antes de redirigir
-      localStorage.removeItem('sb-auth-token');
-      sessionStorage.removeItem('sb-auth-token');
-      
-      // Redirige después de autenticar
+      // Redirigir al usuario a la página principal
       navigate('/');
     } catch (error) {
       console.error('Error en login:', error);
@@ -81,6 +73,8 @@ function IniciarSesion() {
       setIsLoading(false);
     }
   };
+  
+  
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center p-4">
@@ -135,7 +129,6 @@ function IniciarSesion() {
   );
 }
 
-// Componente para visualización de boletas de usuarios no admin
 function MisBoletas({ userId }) {
   const [boletas, setBoletas] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -150,7 +143,6 @@ function MisBoletas({ userId }) {
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-
         setBoletas(data || []);
       } catch (error) {
         console.error('Error cargando boletas:', error);
@@ -160,9 +152,7 @@ function MisBoletas({ userId }) {
       }
     };
 
-    if (userId) {
-      cargarBoletas();
-    }
+    if (userId) cargarBoletas();
   }, [userId]);
 
   const handleDownload = (url) => {
@@ -218,7 +208,6 @@ function MisBoletas({ userId }) {
   );
 }
 
-// Componente para Gestión de Boletas (admin)
 function GestionBoletas() {
   const [usuarios, setUsuarios] = useState([]);
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('');
@@ -240,7 +229,6 @@ function GestionBoletas() {
           .order('nombre', { ascending: true });
 
         if (error) throw error;
-
         if (data && data.length > 0) {
           setUsuarios(data);
           setUsuarioSeleccionado(data[0].id);
@@ -257,15 +245,13 @@ function GestionBoletas() {
   }, []);
 
   useEffect(() => {
-    if (usuarioSeleccionado) {
-      cargarBoletasUsuario();
-    }
+    if (usuarioSeleccionado) cargarBoletasUsuario();
   }, [usuarioSeleccionado]);
 
   const cargarBoletasUsuario = async () => {
     try {
       const { data, error } = await supabase
-        .from('boletas_usuarios')  // Cambiado a la tabla correcta
+        .from('boletas_usuarios')
         .select('*')
         .eq('user_id', usuarioSeleccionado)
         .order('created_at', { ascending: false });
@@ -289,7 +275,6 @@ function GestionBoletas() {
     setIsUploading(true);
   
     try {
-      // 1. Verificar permisos de admin
       const { data: { user } } = await supabase.auth.getUser();
       const { data: userData, error: userError } = await supabase
         .from('users')
@@ -301,29 +286,25 @@ function GestionBoletas() {
         throw new Error('Solo los administradores pueden subir boletas');
       }
 
-      // 2. Subir archivo al bucket (con nombre organizado)
       const fileExt = archivo.name.split('.').pop();
       const fileName = `${usuarioSeleccionado}/${ano}-${mes}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
-        .from('boletas-pago')  // Nombre correcto del bucket
+        .from('boletas-pago')
         .upload(fileName, archivo, {
           cacheControl: '3600',
-          upsert: true  // Permite sobreescribir si ya existe
+          upsert: true
         });
 
       if (uploadError) throw uploadError;
 
-      // 3. Obtener URL pública
       const { data: { publicUrl } } = supabase.storage
         .from('boletas-pago')
         .getPublicUrl(fileName);
         
-
-      // 4. Registrar en la tabla de boletas
       const { error: insertError } = await supabase
-        .from('boletas_usuarios')  // Tabla correcta
-        .upsert({  // Usamos upsert para actualizar si ya existe
+        .from('boletas_usuarios')
+        .upsert({
           user_id: usuarioSeleccionado,
           mes: mes,
           ano: ano,
@@ -353,17 +334,14 @@ function GestionBoletas() {
     if (!window.confirm('¿Estás seguro de eliminar esta boleta?')) return;
 
     try {
-      // Extraer la ruta del archivo desde la URL
       const filePath = url.split('/storage/v1/object/public/boletas-pago/')[1];
       
-      // Eliminar del storage
       const { error: deleteError } = await supabase.storage
         .from('boletas-pago')
         .remove([filePath]);
 
       if (deleteError) throw deleteError;
 
-      // Eliminar el registro de la tabla
       const { error: deleteRecordError } = await supabase
         .from('boletas_usuarios')
         .delete()
@@ -523,11 +501,8 @@ function GestionBoletas() {
   );
 }
 
-
-// Componente para Gestión de Días Libres
 function GestionDiasLibres() {
   const [usuarios, setUsuarios] = useState([]);
-  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('todos');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -537,33 +512,33 @@ function GestionDiasLibres() {
   const [modoAsignacion, setModoAsignacion] = useState(false);
   const [usuarioParaAsignar, setUsuarioParaAsignar] = useState('');
 
-  // Cargar sedes y usuarios al montar el componente
+  // Cargar datos iniciales
   useEffect(() => {
     const cargarDatosIniciales = async () => {
       setIsLoading(true);
       try {
+        // 1. Cargar todos los usuarios activos
         const { data: usuariosData, error: usuariosError } = await supabase
           .from('users')
-          .select('id, email, nombre, apellido, sede, area, activo')
+          .select('id, nombre, apellido, sede, area')
           .eq('activo', true)
-          .neq('area', 'admin')
           .order('nombre', { ascending: true });
 
         if (usuariosError) throw usuariosError;
 
-        if (usuariosData && usuariosData.length > 0) {
+        if (usuariosData) {
           setUsuarios(usuariosData);
           
+          // Obtener sedes únicas para el filtro
           const sedesUnicas = [...new Set(usuariosData.map(u => u.sede))]
             .filter(sede => sede)
             .map(sede => ({ id: sede, nombre: sede }));
           
-          setSedes(sedesUnicas);
-          
-          if (sedesUnicas.length > 0) {
-            setSedeSeleccionada(sedesUnicas[0].id);
-          }
+          setSedes([{ id: 'todos', nombre: 'TODOS' }, ...sedesUnicas]);
         }
+
+        // 2. Cargar todos los días libres con información de usuarios
+        await cargarTodosDiasLibres();
       } catch (error) {
         console.error('Error cargando datos iniciales:', error);
         toast.error('Error al cargar datos iniciales: ' + error.message);
@@ -575,48 +550,31 @@ function GestionDiasLibres() {
     cargarDatosIniciales();
   }, []);
 
-  // Cargar días libres cuando cambia la sede o usuario seleccionado
+  // Cargar días libres cuando cambia la sede seleccionada
   useEffect(() => {
     if (sedeSeleccionada) {
-      cargarDiasLibresFiltrados();
+      cargarTodosDiasLibres();
     }
-  }, [sedeSeleccionada, usuarioSeleccionado]);
+  }, [sedeSeleccionada]);
 
-  const cargarDiasLibresFiltrados = async () => {
+  // Función para cargar todos los días libres con información de usuarios
+  const cargarTodosDiasLibres = async () => {
     try {
       setIsLoading(true);
       
-      // Obtener IDs de usuarios según los filtros
-      let userIds = [];
-      
-      if (sedeSeleccionada === 'todos') {
-        // Si se selecciona TODOS, incluir todos los usuarios activos
-        userIds = usuarios.map(u => u.id);
-      } else {
-        // Filtrar por sede seleccionada
-        userIds = usuarios
-          .filter(u => u.sede === sedeSeleccionada)
-          .map(u => u.id);
-      }
-
-      // Si además hay un usuario específico seleccionado, filtrar por ese usuario
-      if (usuarioSeleccionado !== 'todos') {
-        userIds = userIds.filter(id => id === usuarioSeleccionado);
-      }
-
-      if (userIds.length === 0) {
-        setTodosDiasLibres([]);
-        return;
-      }
-
-      // Consulta para obtener días libres con información de usuario
-      const { data: diasData, error: diasError } = await supabase
+      let query = supabase
         .from('dias_libres')
         .select(`
           *,
           users!dias_libres_user_id_fkey(id, nombre, apellido, sede, area)
-        `)
-        .in('user_id', userIds)
+        `);
+
+      // Aplicar filtro por sede si no es "todos"
+      if (sedeSeleccionada !== 'todos') {
+        query = query.eq('users.sede', sedeSeleccionada);
+      }
+
+      const { data: diasData, error: diasError } = await query
         .order('fecha', { ascending: true });
 
       if (diasError) throw diasError;
@@ -630,80 +588,7 @@ function GestionDiasLibres() {
     }
   };
 
-  const handleDateChange = (date) => {
-    setSelectedDate(date);
-    setModoAsignacion(true);
-  };
-
-  const agregarDiaLibre = async () => {
-    if (!usuarioParaAsignar || !selectedDate) {
-      toast.error('Selecciona un usuario y una fecha');
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      // Verificar si ya existe un día libre para esta fecha y usuario
-      const fechaFormateada = selectedDate.toISOString().split('T')[0];
-      
-      const { data: existing, error: existingError } = await supabase
-        .from('dias_libres')
-        .select('id')
-        .eq('user_id', usuarioParaAsignar)
-        .eq('fecha', fechaFormateada)
-        .maybeSingle();
-
-      if (existingError) throw existingError;
-
-      if (existing) {
-        toast.error('Este usuario ya tiene un día libre para esta fecha');
-        return;
-      }
-
-      // Insertar nuevo día libre
-      const { error } = await supabase
-        .from('dias_libres')
-        .insert([{
-          user_id: usuarioParaAsignar,
-          fecha: fechaFormateada,
-          todo_el_dia: true
-        }]);
-
-      if (error) throw error;
-
-      toast.success('Día libre agregado correctamente');
-      await cargarDiasLibresFiltrados();
-      setModoAsignacion(false);
-      setUsuarioParaAsignar('');
-    } catch (error) {
-      console.error('Error agregando día libre:', error);
-      toast.error('Error al agregar día libre: ' + error.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const eliminarDiaLibre = async (id) => {
-    if (!window.confirm('¿Estás seguro de eliminar este día libre?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('dias_libres')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      toast.success('Día libre eliminado correctamente');
-      await cargarDiasLibresFiltrados();
-    } catch (error) {
-      console.error('Error eliminando día libre:', error);
-      toast.error('Error al eliminar día libre: ' + error.message);
-    }
-  };
-
-  // Generar colores únicos para cada usuario
+  // Generar color único para cada usuario
   const generarColorUsuario = (userId) => {
     const hash = userId.split('').reduce((acc, char) => {
       return char.charCodeAt(0) + ((acc << 5) - acc);
@@ -714,20 +599,21 @@ function GestionDiasLibres() {
   // Preparar eventos para el calendario
   const prepararEventos = () => {
     return todosDiasLibres.map(dia => {
-      const usuario = dia.users || { nombre: 'Desconocido', apellido: '' };
+      const usuario = dia.users || { nombre: 'Desconocido', apellido: '', sede: 'Sin sede' };
       return {
         id: dia.id,
-        title: `${usuario.nombre} ${usuario.apellido}`,
+        title: `${usuario.nombre} ${usuario.apellido} (${usuario.sede})`,
         start: new Date(dia.fecha),
         end: new Date(dia.fecha),
         allDay: true,
         resource: dia,
-        color: generarColorUsuario(dia.user_id)
+        color: generarColorUsuario(dia.user_id),
+        className: 'evento-dia-libre'
       };
     });
   };
 
-  // Estilo personalizado para eventos
+  // Estilo para los eventos del calendario
   const eventStyleGetter = (event) => {
     return {
       style: {
@@ -744,17 +630,18 @@ function GestionDiasLibres() {
     };
   };
 
-  // Crear leyenda de usuarios
+  // Crear leyenda de usuarios con sus colores
   const crearLeyendaUsuarios = () => {
-    const usuariosConDiasLibres = [...new Set(
+    // Obtener usuarios únicos que tienen días libres
+    const usuariosUnicos = [...new Map(
       todosDiasLibres
         .filter(dia => dia.users)
-        .map(dia => dia.users)
-    )];
+        .map(dia => [dia.users.id, dia.users])
+    ).values()];
 
     return (
-      <div className="flex flex-wrap gap-2 mb-4">
-        {usuariosConDiasLibres.map(usuario => (
+      <div className="flex flex-wrap gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
+        {usuariosUnicos.map(usuario => (
           <div key={usuario.id} className="flex items-center">
             <div 
               className="w-4 h-4 rounded-full mr-2" 
@@ -769,208 +656,279 @@ function GestionDiasLibres() {
     );
   };
 
+  // Manejar selección de fecha para asignar día libre
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+    setModoAsignacion(true);
+  };
+
+  // Agregar nuevo día libre
+  const agregarDiaLibre = async () => {
+    if (!usuarioParaAsignar || !selectedDate) {
+      toast.error('Selecciona un usuario y una fecha');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const fechaFormateada = selectedDate.toISOString().split('T')[0];
+      
+      // Verificar si ya existe un día libre para este usuario en esta fecha
+      const { data: existing, error: existingError } = await supabase
+        .from('dias_libres')
+        .select('id')
+        .eq('user_id', usuarioParaAsignar)
+        .eq('fecha', fechaFormateada)
+        .maybeSingle();
+
+      if (existingError) throw existingError;
+      if (existing) {
+        toast.error('Este usuario ya tiene un día libre para esta fecha');
+        return;
+      }
+
+      // Crear nuevo día libre
+      const { error } = await supabase
+        .from('dias_libres')
+        .insert([{
+          user_id: usuarioParaAsignar,
+          fecha: fechaFormateada,
+          todo_el_dia: true
+        }]);
+
+      if (error) throw error;
+
+      toast.success('Día libre agregado correctamente');
+      await cargarTodosDiasLibres();
+      setModoAsignacion(false);
+      setUsuarioParaAsignar('');
+    } catch (error) {
+      console.error('Error agregando día libre:', error);
+      toast.error('Error al agregar día libre: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Eliminar día libre
+  const eliminarDiaLibre = async (id) => {
+    if (!window.confirm('¿Estás seguro de eliminar este día libre?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('dias_libres')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast.success('Día libre eliminado correctamente');
+      await cargarTodosDiasLibres();
+    } catch (error) {
+      console.error('Error eliminando día libre:', error);
+      toast.error('Error al eliminar día libre: ' + error.message);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
       <h2 className="text-lg font-semibold text-gray-900 mb-6">
         Gestión de Días Libres
       </h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Sede
-              </label>
-              <select
-                value={sedeSeleccionada}
-                onChange={(e) => setSedeSeleccionada(e.target.value)}
-                className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                disabled={isLoading || sedes.length === 0}
-              >
-                {sedes.map((sede) => (
-                  <option key={sede.id} value={sede.id}>{sede.nombre}</option>
-                ))}
-              </select>
-            </div>
+      <div className="grid gap-6">
+        {/* Filtros */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Filtrar por Sede
+            </label>
+            <select
+              value={sedeSeleccionada}
+              onChange={(e) => setSedeSeleccionada(e.target.value)}
+              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+              disabled={isLoading}
+            >
+              {sedes.map((sede) => (
+                <option key={sede.id} value={sede.id}>{sede.nombre}</option>
+              ))}
+            </select>
+          </div>
+        </div>
 
-            <div>
+        {/* Leyenda de usuarios */}
+        {todosDiasLibres.length > 0 && crearLeyendaUsuarios()}
+
+        {/* Calendario */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Calendario de Días Libres
+          </label>
+          <div className="border rounded-lg p-2">
+            {isLoading ? (
+              <div className="flex justify-center items-center h-96">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+              </div>
+            ) : (
+              <BigCalendar
+                localizer={localizer}
+                events={prepararEventos()}
+                startAccessor="start"
+                endAccessor="end"
+                style={{ height: 500 }}
+                defaultView="month"
+                selectable
+                onSelectSlot={({ start }) => handleDateChange(start)}
+                onSelectEvent={(event) => {
+                  if (window.confirm(`¿Eliminar día libre de ${event.title}?`)) {
+                    eliminarDiaLibre(event.id);
+                  }
+                }}
+                eventPropGetter={eventStyleGetter}
+                messages={{
+                  today: 'Hoy',
+                  previous: 'Anterior',
+                  next: 'Siguiente',
+                  month: 'Mes',
+                  week: 'Semana',
+                  day: 'Día',
+                }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Formulario para asignar día libre */}
+        {modoAsignacion && (
+          <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+            <h3 className="font-medium text-gray-800 mb-2">Asignar Día Libre</h3>
+            <p className="text-lg font-semibold mb-2">
+              {selectedDate.toLocaleDateString('es-ES', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long', 
+                year: 'numeric' 
+              })}
+            </p>
+            
+            <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Usuario
+                Seleccionar Usuario
               </label>
               <select
-                value={usuarioSeleccionado}
-                onChange={(e) => setUsuarioSeleccionado(e.target.value)}
+                value={usuarioParaAsignar}
+                onChange={(e) => setUsuarioParaAsignar(e.target.value)}
                 className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                disabled={isLoading}
               >
-                <option value="todos">Todos los usuarios</option>
+                <option value="">Selecciona un usuario</option>
                 {usuarios
-                  .filter(u => u.sede === sedeSeleccionada)
+                  .filter(u => sedeSeleccionada === 'todos' || u.sede === sedeSeleccionada)
                   .map((usuario) => (
                     <option key={usuario.id} value={usuario.id}>
-                      {usuario.nombre} {usuario.apellido}
+                      {usuario.nombre} {usuario.apellido} ({usuario.sede || 'Sin sede'})
                     </option>
                   ))}
               </select>
             </div>
-          </div>
 
-          {/* Leyenda de usuarios */}
-          {todosDiasLibres.length > 0 && crearLeyendaUsuarios()}
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Calendario de Días Libres
-            </label>
-            <div className="border rounded-lg p-2">
-              {isLoading ? (
-                <div className="flex justify-center items-center h-96">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-                </div>
-              ) : (
-                <BigCalendar
-                  localizer={localizer}
-                  events={prepararEventos()}
-                  startAccessor="start"
-                  endAccessor="end"
-                  style={{ height: 500 }}
-                  defaultView="month"
-                  selectable
-                  onSelectSlot={({ start }) => handleDateChange(start)}
-                  onSelectEvent={(event) => {
-                    if (window.confirm(`¿Eliminar día libre de ${event.title}?`)) {
-                      eliminarDiaLibre(event.id);
-                    }
-                  }}
-                  eventPropGetter={eventStyleGetter}
-                  messages={{
-                    today: 'Hoy',
-                    previous: 'Anterior',
-                    next: 'Siguiente',
-                    month: 'Mes',
-                    week: 'Semana',
-                    day: 'Día',
-                  }}
-                  components={{
-                    event: ({ event }) => (
-                      <div className="p-1 truncate">
-                        {event.title}
-                      </div>
-                    )
-                  }}
-                />
-              )}
+            <div className="flex space-x-2">
+              <button
+                onClick={agregarDiaLibre}
+                disabled={isSubmitting || !usuarioParaAsignar}
+                className="flex-1 bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Asignando...' : 'Confirmar Día Libre'}
+              </button>
+              <button
+                onClick={() => setModoAsignacion(false)}
+                className="flex-1 bg-gray-200 text-gray-800 p-3 rounded-lg hover:bg-gray-300"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
-        </div>
+        )}
 
-        <div>
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
-            <h3 className="font-medium text-blue-800 mb-2">Instrucciones</h3>
-            <p className="text-sm text-blue-700">
-              1. Selecciona una sede y usuario (o "Todos")<br />
-              2. Los días libres aparecen en el calendario<br />
-              3. Haz clic en una fecha para asignar día libre<br />
-              4. Selecciona usuario y confirma<br />
-              5. Haz clic en un día existente para eliminarlo
-            </p>
-          </div>
-
-          {modoAsignacion ? (
-            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
-              <h3 className="font-medium text-gray-800 mb-2">Asignar Día Libre</h3>
-              <p className="text-lg font-semibold mb-2">
-                {selectedDate.toLocaleDateString('es-ES', { 
-                  weekday: 'long', 
-                  day: 'numeric', 
-                  month: 'long', 
-                  year: 'numeric' 
-                })}
+        {/* Resumen estadístico */}
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="font-medium text-gray-800 mb-2">Resumen</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <p className="text-sm font-medium text-blue-800">Total Usuarios</p>
+              <p className="text-xl font-bold">
+                {usuarios.filter(u => sedeSeleccionada === 'todos' || u.sede === sedeSeleccionada).length}
               </p>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Seleccionar Usuario
-                </label>
-                <select
-                  value={usuarioParaAsignar}
-                  onChange={(e) => setUsuarioParaAsignar(e.target.value)}
-                  className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                >
-                  <option value="">Selecciona un usuario</option>
-                  {usuarios
-                    .filter(u => u.sede === sedeSeleccionada)
-                    .map((usuario) => (
-                      <option key={usuario.id} value={usuario.id}>
-                        {usuario.nombre} {usuario.apellido} ({usuario.area})
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="flex space-x-2">
-                <button
-                  onClick={agregarDiaLibre}
-                  disabled={isSubmitting || !usuarioParaAsignar}
-                  className="flex-1 bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Asignando...' : 'Confirmar Día Libre'}
-                </button>
-                <button
-                  onClick={() => setModoAsignacion(false)}
-                  className="flex-1 bg-gray-200 text-gray-800 p-3 rounded-lg hover:bg-gray-300"
-                >
-                  Cancelar
-                </button>
-              </div>
             </div>
-          ) : (
-            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
-              <h3 className="font-medium text-gray-800 mb-2">Resumen</h3>
-              <p className="text-sm text-gray-600">
-                Usuarios en la sede: {usuarios.filter(u => u.sede === sedeSeleccionada).length}<br />
-                Días libres este mes: {todosDiasLibres.filter(dia => {
+            <div className="bg-green-50 p-3 rounded-lg">
+              <p className="text-sm font-medium text-green-800">Días libres este mes</p>
+              <p className="text-xl font-bold">
+                {todosDiasLibres.filter(dia => {
                   const fecha = new Date(dia.fecha);
                   const hoy = new Date();
                   return fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear();
                 }).length}
               </p>
             </div>
-          )}
-
-          {usuarioSeleccionado !== 'todos' && todosDiasLibres.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <h3 className="font-medium text-gray-800 mb-2">Días libres del usuario</h3>
-              <ul className="divide-y divide-gray-200 max-h-60 overflow-y-auto">
-                {todosDiasLibres.map(dia => (
-                  <li key={dia.id} className="py-2 flex justify-between items-center">
-                    <span>
-                      {new Date(dia.fecha).toLocaleDateString('es-ES', { 
-                        weekday: 'short',
-                        day: 'numeric', 
-                        month: 'short',
-                        year: 'numeric'
-                      })}
-                    </span>
-                    <button 
-                      onClick={() => eliminarDiaLibre(dia.id)}
-                      className="text-red-600 hover:text-red-800 text-sm"
-                    >
-                      Eliminar
-                    </button>
-                  </li>
-                ))}
-              </ul>
+            <div className="bg-purple-50 p-3 rounded-lg">
+              <p className="text-sm font-medium text-purple-800">Días libres totales</p>
+              <p className="text-xl font-bold">{todosDiasLibres.length}</p>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// Componente Principal
+function MisDatos({ userData }) {
+  if (!userData) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="text-gray-500 mt-2">Cargando datos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+      <h2 className="text-lg font-semibold text-gray-900 mb-6">
+        Mis Datos Personales
+      </h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-gray-900">{userData.nombre || 'No especificado'}</p>
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Apellido</label>
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-gray-900">{userData.apellido || 'No especificado'}</p>
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Sede</label>
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-gray-900">{userData.sede || 'No especificado'}</p>
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Área</label>
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-gray-900">{userData.area || 'No especificado'}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PaginaPrincipal() {
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
@@ -991,6 +949,7 @@ function PaginaPrincipal() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('registro');
   const [userActiveTab, setUserActiveTab] = useState('registro');
+  const [userData, setUserData] = useState(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1025,7 +984,9 @@ function PaginaPrincipal() {
   useEffect(() => {
     const getSession = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession({
+          forceRefresh: true
+        });
         
         if (sessionError || !session?.user) {
           throw sessionError || new Error('No hay sesión activa');
@@ -1033,7 +994,7 @@ function PaginaPrincipal() {
 
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('activo, email, nombre, apellido')
+          .select('id, email, nombre, apellido, sede, area, activo')
           .eq('id', session.user.id)
           .single();
 
@@ -1051,6 +1012,7 @@ function PaginaPrincipal() {
         setUserEmail(userData.email);
         setUserName(userData.nombre || '');
         setUserLastName(userData.apellido || '');
+        setUserData(userData); 
         buscarUltimoRegistro(session.user.id);
         buscarTodosRegistros(session.user.id);
         buscarLugaresTrabajo();
@@ -1072,7 +1034,6 @@ function PaginaPrincipal() {
         .order('fecha', { ascending: true });
 
       if (error) throw error;
-
       setDiasLibres(data || []);
     } catch (error) {
       console.error('Error cargando días libres:', error);
@@ -1100,7 +1061,6 @@ function PaginaPrincipal() {
         .eq('ativo', true);
 
       if (error) throw error;
-
       setLugaresTrabajo(data);
       if (data.length > 0) {
         setLugarTrabajo(data[0].name);
@@ -1123,7 +1083,6 @@ function PaginaPrincipal() {
         .single();
 
       if (error) throw error;
-
       if (data) {
         setUltimoRegistro(data);
         setRegistroTiempo(data);
@@ -1144,7 +1103,6 @@ function PaginaPrincipal() {
         .order('start_time', { ascending: false });
 
       if (error) throw error;
-
       if (data) {
         setTodosRegistros(data);
         const eventos = data.map(registro => ({
@@ -1288,25 +1246,26 @@ function PaginaPrincipal() {
 
   const renderAdminContent = () => {
     return (
-      <div className="space-y-4">
-        <div className="flex border-b border-gray-200">
+      <div className="flex">
+        {/* Barra lateral */}
+        <div className="w-64 bg-gray-100 p-4">
           <button
-            className={`px-4 py-2 font-medium text-sm flex items-center ${
-              activeTab === 'registro' 
-                ? 'border-b-2 border-blue-500 text-blue-600' 
-                : 'text-gray-500 hover:text-gray-700'
+            className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
+              activeTab === 'registro'
+                ? 'bg-blue-500 text-white'
+                : 'text-gray-500 hover:bg-gray-200'
             }`}
             onClick={() => setActiveTab('registro')}
           >
-            <Clock className="w-4 h-4 mr-2" />
-            Registro
+            <Truck className="w-4 h-4 mr-2" />
+            General
           </button>
           
           <button
-            className={`px-4 py-2 font-medium text-sm flex items-center ${
-              activeTab === 'boletas' 
-                ? 'border-b-2 border-blue-500 text-blue-600' 
-                : 'text-gray-500 hover:text-gray-700'
+            className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
+              activeTab === 'boletas'
+                ? 'bg-blue-500 text-white'
+                : 'text-gray-500 hover:bg-gray-200'
             }`}
             onClick={() => setActiveTab('boletas')}
           >
@@ -1315,10 +1274,10 @@ function PaginaPrincipal() {
           </button>
           
           <button
-            className={`px-4 py-2 font-medium text-sm flex items-center ${
-              activeTab === 'dias-libres' 
-                ? 'border-b-2 border-blue-500 text-blue-600' 
-                : 'text-gray-500 hover:text-gray-700'
+            className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
+              activeTab === 'dias-libres'
+                ? 'bg-blue-500 text-white'
+                : 'text-gray-500 hover:bg-gray-200'
             }`}
             onClick={() => setActiveTab('dias-libres')}
           >
@@ -1327,10 +1286,10 @@ function PaginaPrincipal() {
           </button>
           
           <button
-            className={`px-4 py-2 font-medium text-sm flex items-center ${
-              activeTab === 'dashboard' 
-                ? 'border-b-2 border-blue-500 text-blue-600' 
-                : 'text-gray-500 hover:text-gray-700'
+            className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
+              activeTab === 'dashboard'
+                ? 'bg-blue-500 text-white'
+                : 'text-gray-500 hover:bg-gray-200'
             }`}
             onClick={() => setActiveTab('dashboard')}
           >
@@ -1339,50 +1298,59 @@ function PaginaPrincipal() {
             </svg>
             Dashboard
           </button>
+  
+          
         </div>
-
-        <div className="transition-all duration-200">
-          {activeTab === 'registro' && (
-            <div className="animate-fadeIn">
-              {renderNormalUserContent()}
-            </div>
-          )}
-          
-          {activeTab === 'boletas' && (
-            <div className="animate-fadeIn">
-              <GestionBoletas />
-            </div>
-          )}
-          
-          {activeTab === 'dias-libres' && (
-            <div className="animate-fadeIn">
-              <GestionDiasLibres />
-            </div>
-          )}
-          
-          {activeTab === 'dashboard' && (
-            <div className="animate-fadeIn">
-              <div className="bg-white rounded-lg shadow p-4">
-                <iframe 
-                  title="Dashboard Power BI"
-                  width="100%" 
-                  height="700"
-                  src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
-                  frameBorder="0"
-                  allowFullScreen
-                />
+  
+        {/* Conteúdo principal */}
+        <div className="flex-1 p-6">
+          <div className="transition-all duration-200">
+            {activeTab === 'registro' && (
+              <div className="animate-fadeIn">
+                {renderNormalUserContent()}
               </div>
-            </div>
-          )}
+            )}
+            
+            {activeTab === 'boletas' && (
+              <div className="animate-fadeIn">
+                <GestionBoletas />
+              </div>
+            )}
+            
+            {activeTab === 'dias-libres' && (
+              <div className="animate-fadeIn">
+                <GestionDiasLibres />
+              </div>
+            )}
+  
+            {activeTab === 'dashboard' && (
+              <div className="animate-fadeIn">
+                <div className="bg-white rounded-lg shadow p-4">
+                  <iframe 
+                    title="Dashboard Power BI"
+                    width="100%" 
+                    height="700"
+                    src="https://app.powerbi.com/view?r=eyJrIjoiOTEwODdmMmYtM2FjZC00ZDUyLWI1MjctM2IwYTVjM2RiMTNiIiwidCI6IjljNzI4NmYyLTg0OTUtNDgzZi1hMTc4LTQwMjZmOWU0ZTM2MiIsImMiOjR9" 
+                    frameBorder="0"
+                    allowFullScreen
+                  />
+                </div>
+              </div>
+            )}
+  
+            
+          </div>
         </div>
       </div>
     );
   };
-
+  
+  
   const renderNormalUserContent = () => {
     return (
       <>
         <div className="flex border-b border-gray-200 mb-6">
+          {/* Pestañas */}
           <button
             className={`px-4 py-2 font-medium text-sm flex items-center ${
               userActiveTab === 'registro' 
@@ -1394,7 +1362,21 @@ function PaginaPrincipal() {
             <Clock className="w-4 h-4 mr-2" />
             Registro de mis Turnos
           </button>
-          
+          {/* Pestaña MIS DATOS */}
+          <button
+            className={`px-4 py-2 font-medium text-sm flex items-center ${
+              userActiveTab === 'mis-datos' 
+                ? 'border-b-2 border-blue-500 text-blue-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            
+            onClick={() => setUserActiveTab('mis-datos')}
+          >
+            <User className="w-4 h-4 mr-2" />
+            Mis Datos
+            
+          </button>
+
           <button
             className={`px-4 py-2 font-medium text-sm flex items-center ${
               userActiveTab === 'boletas' 
@@ -1404,219 +1386,229 @@ function PaginaPrincipal() {
             onClick={() => setUserActiveTab('boletas')}
           >
             <FileText className="w-4 h-4 mr-2" />
-            Mis Boletas
+            Mis Boletas de Pago
           </button>
         </div>
 
-        {userActiveTab === 'registro' ? (
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Estado del Turno
-              </h2>
-              <div className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <Calendar className="w-5 h-5 text-gray-500 mt-1" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Fecha</p>
-                    <p className="text-sm text-gray-600">
-                      {new Date().toLocaleDateString('es-ES', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </p>
+        {userActiveTab === 'registro' && (
+          <>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  Estado del Turno
+                </h2>
+                <div className="space-y-4">
+                  <div className="flex items-start space-x-3">
+                    <Calendar className="w-5 h-5 text-gray-500 mt-1" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Fecha</p>
+                      <p className="text-sm text-gray-600">
+                        {new Date().toLocaleDateString('es-ES', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                
-                {estaTrabajando && registroTiempo && (
-                  <>
-                    <div className="flex items-start space-x-3">
-                      <Clock className="w-5 h-5 text-gray-500 mt-1" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
-                        <p className="text-sm text-gray-600">
-                          {new Date(registroTiempo.start_time).toLocaleTimeString('es-ES')}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-start space-x-3">
-                      <Timer className="w-5 h-5 text-gray-500 mt-1" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
-                        <p className="text-xl font-bold text-blue-600">
-                          {formatDuration(tiempoTranscurrido)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start space-x-3">
-                      <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
-                        <p className="text-sm text-gray-600">{registroTiempo.workplace}</p>
-                      </div>
-                    </div>
-
-                    {ubicacionActual && (
+                  
+                  {estaTrabajando && registroTiempo && (
+                    <>
                       <div className="flex items-start space-x-3">
-                        <MapPin className="w-5 h-5 text-gray-500 mt-1" />
+                        <Clock className="w-5 h-5 text-gray-500 mt-1" />
                         <div>
-                          <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
+                          <p className="text-sm font-medium text-gray-700">Inicio del Turno</p>
                           <p className="text-sm text-gray-600">
-                            Lat: {ubicacionActual.latitude.toFixed(6)}<br />
-                            Long: {ubicacionActual.longitude.toFixed(6)}
+                            {new Date(registroTiempo.start_time).toLocaleTimeString('es-ES')}
                           </p>
                         </div>
                       </div>
+                      
+                      <div className="flex items-start space-x-3">
+                        <Timer className="w-5 h-5 text-gray-500 mt-1" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
+                          <p className="text-xl font-bold text-blue-600">
+                            {formatDuration(tiempoTranscurrido)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start space-x-3">
+                        <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
+                          <p className="text-sm text-gray-600">{registroTiempo.workplace}</p>
+                        </div>
+                      </div>
+
+                      {ubicacionActual && (
+                        <div className="flex items-start space-x-3">
+                          <MapPin className="w-5 h-5 text-gray-500 mt-1" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
+                            <p className="text-sm text-gray-600">
+                              Lat: {ubicacionActual.latitude.toFixed(6)}<br />
+                              Long: {ubicacionActual.longitude.toFixed(6)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  {estaTrabajando ? 'Finalizar Turno' : 'Iniciar Turno'}
+                </h2>
+                
+                {!estaTrabajando ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Lugar de Trabajo
+                      </label>
+                      <select
+                        value={lugarTrabajo}
+                        onChange={(e) => setLugarTrabajo(e.target.value)}
+                        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                      >
+                        {lugaresTrabajo.map((lugar) => (
+                          <option key={lugar.id} value={lugar.name}>
+                            {lugar.name}
+                          </option>
+                        ))}
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                    
+                    {lugarTrabajo === 'Otro' && (
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Especificar lugar de trabajo
+                        </label>
+                        <input
+                          type="text"
+                          value={lugarPersonalizado}
+                          onChange={(e) => setLugarPersonalizado(e.target.value)}
+                          placeholder="Ingresa el lugar de trabajo"
+                          className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
+                        />
+                      </div>
                     )}
-                  </>
+                    
+                    <button
+                      onClick={iniciarTurno}
+                      disabled={estaProcesando}
+                      className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+                    >
+                      <Clock className="w-5 h-5" />
+                      <span>{estaProcesando ? 'Procesando...' : 'Iniciar Turno'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
+                      <div className="flex items-center space-x-2 text-yellow-800">
+                        <MapPin className="w-5 h-5" />
+                        <span className="font-medium">Turno en progreso</span>
+                      </div>
+                      <p className="mt-1 text-sm text-yellow-700">
+                        Asegúrate de finalizar tu turno antes de salir.
+                      </p>
+                    </div>
+                    
+                    <button
+                      onClick={finalizarTurno}
+                      disabled={estaProcesando}
+                      className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
+                    >
+                      <Clock className="w-5 h-5" />
+                      <span>{estaProcesando ? 'Procesando...' : 'Finalizar Turno'}</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                {estaTrabajando ? 'Finalizar Turno' : 'Iniciar Turno'}
+                Calendario de Trabajo
               </h2>
-              
-              {!estaTrabajando ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Lugar de Trabajo
-                    </label>
-                    <select
-                      value={lugarTrabajo}
-                      onChange={(e) => setLugarTrabajo(e.target.value)}
-                      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                    >
-                      {lugaresTrabajo.map((lugar) => (
-                        <option key={lugar.id} value={lugar.name}>
-                          {lugar.name}
-                        </option>
-                      ))}
-                      <option value="Otro">Otro</option>
-                    </select>
-                  </div>
-                  
-                  {lugarTrabajo === 'Otro' && (
-                    <div className="mt-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Especificar lugar de trabajo
-                      </label>
-                      <input
-                        type="text"
-                        value={lugarPersonalizado}
-                        onChange={(e) => setLugarPersonalizado(e.target.value)}
-                        placeholder="Ingresa el lugar de trabajo"
-                        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2.5 border text-sm"
-                      />
-                    </div>
-                  )}
-                  
-                  <button
-                    onClick={iniciarTurno}
-                    disabled={estaProcesando}
-                    className="w-full bg-blue-600 text-white p-4 rounded-lg shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
-                  >
-                    <Clock className="w-5 h-5" />
-                    <span>{estaProcesando ? 'Procesando...' : 'Iniciar Turno'}</span>
-                  </button>
+
+              <div className="mb-6 flex flex-wrap gap-4">
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 bg-green-500 rounded-sm"></div>
+                  <span className="text-sm text-gray-950">Turno Completado</span>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
-                    <div className="flex items-center space-x-2 text-yellow-800">
-                      <MapPin className="w-5 h-5" />
-                      <span className="font-medium">Turno en progreso</span>
-                    </div>
-                    <p className="mt-1 text-sm text-yellow-700">
-                      Asegúrate de finalizar tu turno antes de salir.
-                    </p>
-                  </div>
-                  
-                  <button
-                    onClick={finalizarTurno}
-                    disabled={estaProcesando}
-                    className="w-full bg-red-600 text-white p-4 rounded-lg shadow-sm hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50"
-                  >
-                    <Clock className="w-5 h-5" />
-                    <span>{estaProcesando ? 'Procesando...' : 'Finalizar Turno'}</span>
-                  </button>
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
+                  <span className="text-sm text-gray-950">Turno en Progreso</span>
                 </div>
-              )}
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 bg-purple-500 rounded-sm"></div>
+                  <span className="text-sm text-gray-950">Día Libre</span>
+                </div>
+              </div>  
+
+              <div className="overflow-x-auto">
+                <BigCalendar
+                  localizer={localizer}
+                  events={[
+                    ...eventosCalendario,
+                    ...diasLibres.map(dia => ({
+                      title: 'Día Libre',
+                      start: new Date(dia.fecha),
+                      end: new Date(dia.fecha),
+                      allDay: true,
+                      status: 'dia-libre'
+                    }))
+                  ]}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height: 500 }}
+                  eventPropGetter={(event) => {
+                    if (event.status === 'dia-libre') {
+                      return {
+                        style: {
+                          backgroundColor: '#6f42c1',
+                          borderRadius: '4px',
+                          color: 'white',
+                          border: 'none',
+                          padding: '2px 8px',
+                          fontSize: '14px',
+                        }
+                      };
+                    }
+                    return estiloEvento(event);
+                  }}
+                  defaultView="month"
+                  messages={{
+                    today: 'Hoy',
+                    previous: 'Anterior',
+                    next: 'Siguiente',
+                    month: 'Mes',
+                    week: 'Semana',
+                    day: 'Día',
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        ) : (
-          <MisBoletas userId={userId} />
+          </>
         )}
 
-        <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Calendario de Trabajo
-          </h2>
+        {userActiveTab === 'mis-datos' && (
+          <MisDatos userData={userData} />
+        )}
 
-          <div className="mb-6 flex flex-wrap gap-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-green-500 rounded-sm"></div>
-              <span className="text-sm text-gray-950">Turno Completado</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
-              <span className="text-sm text-gray-950">Turno en Progreso</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-purple-500 rounded-sm"></div>
-              <span className="text-sm text-gray-950">Día Libre</span>
-            </div>
-          </div>  
-
-          <div className="overflow-x-auto">
-            <BigCalendar
-              localizer={localizer}
-              events={[
-                ...eventosCalendario,
-                ...diasLibres.map(dia => ({
-                  title: 'Día Libre',
-                  start: new Date(dia.fecha),
-                  end: new Date(dia.fecha),
-                  allDay: true,
-                  status: 'dia-libre'
-                }))
-              ]}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 500 }}
-              eventPropGetter={(event) => {
-                if (event.status === 'dia-libre') {
-                  return {
-                    style: {
-                      backgroundColor: '#6f42c1',
-                      borderRadius: '4px',
-                      color: 'white',
-                      border: 'none',
-                      padding: '2px 8px',
-                      fontSize: '14px',
-                    }
-                  };
-                }
-                return estiloEvento(event);
-              }}
-              defaultView="month"
-              messages={{
-                today: 'Hoy',
-                previous: 'Anterior',
-                next: 'Siguiente',
-                month: 'Mes',
-                week: 'Semana',
-                day: 'Día',
-              }}
-            />
+        {userActiveTab === 'boletas' && (
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <MisBoletas userId={userId} />
           </div>
-        </div>
+        )}
       </>
     );
   };
@@ -1685,7 +1677,6 @@ function PaginaPrincipal() {
   );
 }
 
-// Componente Principal de la Aplicación
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -1693,22 +1684,12 @@ function App() {
     const cleanCache = async () => {
       if ('serviceWorker' in navigator) {
         try {
-          // Desregistrar service workers
           const registrations = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(registrations.map(r => {
-            console.log('Unregistering service worker:', r.scope);
-            return r.unregister();
-          }));
+          await Promise.all(registrations.map(r => r.unregister()));
     
-          // Limpiar cachés
           const cacheNames = await caches.keys();
-          console.log('Deleting caches:', cacheNames);
-          await Promise.all(cacheNames.map(name => {
-            console.log('Deleting cache:', name);
-            return caches.delete(name);
-          }));
+          await Promise.all(cacheNames.map(name => caches.delete(name)));
     
-          // Forzar recarga para asegurar que todo está limpio
           if (registrations.length > 0 || cacheNames.length > 0) {
             window.location.reload(true);
           }
@@ -1717,7 +1698,6 @@ function App() {
         }
       }
     
-      // Limpiar autenticación previa
       localStorage.removeItem('sb-auth-token');
       sessionStorage.removeItem('sb-auth-token');
       document.cookie.split(';').forEach(c => {
@@ -1729,9 +1709,8 @@ function App() {
 
     const checkAuth = async () => {
       try {
-        // Forzar una nueva sesión omitiendo caché
         const { data: { session }, error: sessionError } = await supabase.auth.getSession({
-          forceRefresh: true // Esto evita usar caché de autenticación
+          forceRefresh: true
         });
         
         if (sessionError || !session?.user) {
@@ -1744,7 +1723,7 @@ function App() {
           .select('activo, nombre, apellido')
           .eq('id', session.user.id)
           .single()
-          .throwOnError(); // Esto lanzará el error si lo hay
+          .throwOnError();
           
         setIsLoggedIn(!!userData?.activo);
         if (!userData?.activo) {
