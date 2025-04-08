@@ -144,7 +144,7 @@ function MisBoletas({ userId }) {
     const cargarBoletas = async () => {
       try {
         const { data, error } = await supabase
-          .from('boletas-pago')
+          .from('boletas_usuarios')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
@@ -531,8 +531,8 @@ function GestionDiasLibres() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [sedes, setSedes] = useState([]);
-  const [sedeSeleccionada, setSedeSeleccionada] = useState('');
+  const [sedes, setSedes] = useState([{ id: 'todos', nombre: 'TODOS' }]);
+  const [sedeSeleccionada, setSedeSeleccionada] = useState('todos');
   const [todosDiasLibres, setTodosDiasLibres] = useState([]);
   const [modoAsignacion, setModoAsignacion] = useState(false);
   const [usuarioParaAsignar, setUsuarioParaAsignar] = useState('');
@@ -586,10 +586,20 @@ function GestionDiasLibres() {
     try {
       setIsLoading(true);
       
-      let userIds = usuarios
-        .filter(u => u.sede === sedeSeleccionada)
-        .map(u => u.id);
+      // Obtener IDs de usuarios según los filtros
+      let userIds = [];
       
+      if (sedeSeleccionada === 'todos') {
+        // Si se selecciona TODOS, incluir todos los usuarios activos
+        userIds = usuarios.map(u => u.id);
+      } else {
+        // Filtrar por sede seleccionada
+        userIds = usuarios
+          .filter(u => u.sede === sedeSeleccionada)
+          .map(u => u.id);
+      }
+
+      // Si además hay un usuario específico seleccionado, filtrar por ese usuario
       if (usuarioSeleccionado !== 'todos') {
         userIds = userIds.filter(id => id === usuarioSeleccionado);
       }
@@ -751,7 +761,7 @@ function GestionDiasLibres() {
               style={{ backgroundColor: generarColorUsuario(usuario.id) }}
             />
             <span className="text-sm">
-              {usuario.nombre} {usuario.apellido}
+              {usuario.nombre} {usuario.apellido} ({usuario.sede || 'Sin sede'})
             </span>
           </div>
         ))}
@@ -1301,7 +1311,7 @@ function PaginaPrincipal() {
             onClick={() => setActiveTab('boletas')}
           >
             <FileText className="w-4 h-4 mr-2" />
-            Boletas
+            Gestión Boletas
           </button>
           
           <button
@@ -1313,7 +1323,7 @@ function PaginaPrincipal() {
             onClick={() => setActiveTab('dias-libres')}
           >
             <Calendar className="w-4 h-4 mr-2" />
-            Días Libres
+            Gestión Días Libres
           </button>
           
           <button
@@ -1382,7 +1392,7 @@ function PaginaPrincipal() {
             onClick={() => setUserActiveTab('registro')}
           >
             <Clock className="w-4 h-4 mr-2" />
-            Registro de Tiempos
+            Registro de mis Turnos
           </button>
           
           <button
