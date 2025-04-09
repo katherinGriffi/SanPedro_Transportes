@@ -700,56 +700,57 @@ function GestionDiasLibres() {
 
   // Agregar nuevo día libre
   const agregarDiaLibre = async () => {
-  if (!usuarioParaAsignar || !selectedDate) {
-    toast.error('Selecciona un usuario y una fecha');
-    return;
-  }
-
-  setIsSubmitting(true);
-
-  try {
-    // Formatear la fecha manualmente (YYYY-MM-DD)
-    const year = selectedDate.getFullYear();
-    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(selectedDate.getDate()).padStart(2, '0');
-    const fechaFormateada = `${year}-${month}-${day}`;
-    
-    // Verificar si ya existe un día libre
-    const { data: existing, error: existingError } = await supabase
-      .from('dias_libres')
-      .select('id')
-      .eq('user_id', usuarioParaAsignar)
-      .eq('fecha', fechaFormateada)
-      .maybeSingle();
-
-    if (existingError) throw existingError;
-    if (existing) {
-      toast.error('Este usuario ya tiene un día libre para esta fecha');
+    if (!usuarioParaAsignar || !selectedDate) {
+      toast.error('Selecciona un usuario y una fecha');
       return;
     }
-
-    // Crear nuevo día libre
-    const { error } = await supabase
-      .from('dias_libres')
-      .insert([{
-        user_id: usuarioParaAsignar,
-        fecha: fechaFormateada,
-        todo_el_dia: true
-      }]);
-
-    if (error) throw error;
-
-    toast.success('Día libre agregado correctamente');
-    await cargarTodosDiasLibres();
-    setModoAsignacion(false);
-    setUsuarioParaAsignar('');
-  } catch (error) {
-    console.error('Error agregando día libre:', error);
-    toast.error('Error al agregar día libre: ' + error.message);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  
+    setIsSubmitting(true);
+  
+    try {
+      // Formatear la fecha sin tener en cuenta la zona horaria
+      const fechaFormateada = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate()
+      ).toISOString().split('T')[0];
+      
+      // Verificar si ya existe un día libre para este usuario en esta fecha
+      const { data: existing, error: existingError } = await supabase
+        .from('dias_libres')
+        .select('id')
+        .eq('user_id', usuarioParaAsignar)
+        .eq('fecha', fechaFormateada)
+        .maybeSingle();
+  
+      if (existingError) throw existingError;
+      if (existing) {
+        toast.error('Este usuario ya tiene un día libre para esta fecha');
+        return;
+      }
+  
+      // Crear nuevo día libre
+      const { error } = await supabase
+        .from('dias_libres')
+        .insert([{
+          user_id: usuarioParaAsignar,
+          fecha: fechaFormateada,
+          todo_el_dia: true
+        }]);
+  
+      if (error) throw error;
+  
+      toast.success('Día libre agregado correctamente');
+      await cargarTodosDiasLibres();
+      setModoAsignacion(false);
+      setUsuarioParaAsignar('');
+    } catch (error) {
+      console.error('Error agregando día libre:', error);
+      toast.error('Error al agregar día libre: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Eliminar día libre
   const eliminarDiaLibre = async (id) => {
