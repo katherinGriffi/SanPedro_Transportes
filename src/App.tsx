@@ -35,44 +35,50 @@ function IniciarSesion() {
     setIsLoading(true);
   
     try {
-      // Limpiar caché y tokens antes de iniciar sesión
-      await supabase.auth.signOut();  // Cerrar sesión si hay sesión activa previamente
-      localStorage.removeItem('sb-auth-token');
-      sessionStorage.removeItem('sb-auth-token');
-      
-      // Intentar iniciar sesión con el nuevo usuario
       toast.dismiss();
+  
+      // 🔹 FORÇAR REMOÇÃO DA SESSÃO ANTERIOR
+      await supabase.auth.signOut();
+      localStorage.clear();  
+      sessionStorage.clear();
+  
+      // 🔹 Tentar autenticar com email e senha
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
   
-      // Verificar si ocurrió algún error en la autenticación
-      if (authError) throw authError;
-      if (!user) throw new Error('No se recibió información del usuario');
-      
-      // Verificar los datos del usuario en la base de datos
+      if (authError) throw new Error(authError.message || 'Erro na autenticação.');
+      if (!user) throw new Error('No se recibió información del usuario.');
+  
+      // 🔹 Buscar dados do usuário na base de dados
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('activo, email, nombre, apellido')
         .eq('id', user.id)
         .single();
   
-      if (userError || !userData) throw userError || new Error('Error al verificar el estado del usuario');
-      if (userData.activo !== true) {
-        await supabase.auth.signOut(); // Cerrar sesión si la cuenta no está activa
+      if (userError || !userData) throw new Error(userError?.message || 'Erro ao verificar o estado do usuário.');
+  
+      // 🔹 Verificar se a conta do usuário está ativa
+      if (!userData.activo) {
+        await supabase.auth.signOut(); 
         throw new Error('Tu cuenta no está activa. Contacta al administrador.');
       }
-      
-      // Redirigir al usuario a la página principal
+  
+      // 🔹 FORÇAR ATUALIZAÇÃO PARA EVITAR CACHE DA SESSÃO
+      window.location.reload();
+  
+      // Redirecionar usuário autenticado
       navigate('/');
     } catch (error) {
-      console.error('Error en login:', error);
-      toast.error(error.message);
+      console.error('Erro no login:', error);
+      toast.error(error.message || 'Ocorreu um erro inesperado.');
     } finally {
       setIsLoading(false);
     }
   };
+  
   
   
 
@@ -559,35 +565,63 @@ function GestionDiasLibres() {
 
   // Función para cargar todos los días libres con información de usuarios
   const cargarTodosDiasLibres = async () => {
-    try {
-      setIsLoading(true);
-      
-      let query = supabase
-        .from('dias_libres')
-        .select(`
-          *,
-          users!dias_libres_user_id_fkey(id, nombre, apellido, sede, area)
-        `);
+  try {
+    setIsLoading(true);
 
-      // Aplicar filtro por sede si no es "todos"
-      if (sedeSeleccionada !== 'todos') {
-        query = query.eq('users.sede', sedeSeleccionada);
-      }
+    // Obtener el usuario autenticado y su rol
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) throw new Error('Usuario no autenticado');
 
-      const { data: diasData, error: diasError } = await query
-        .order('fecha', { ascending: true });
+    // Obtener el rol del usuario desde la tabla users
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single();
 
-      if (diasError) throw diasError;
+    if (userError) throw userError;
 
-      setTodosDiasLibres(diasData || []);
-    } catch (error) {
-      console.error('Error cargando días libres:', error);
-      toast.error('Error al cargar días libres: ' + error.message);
-    } finally {
-      setIsLoading(false);
+    const userRole = userData?.role || 'user';
+
+    // Construir la consulta base con el join correcto
+    let query = supabase
+      .from('dias_libres')
+      .select(`
+        id,
+        user_id,
+        fecha,
+        todo_el_dia,
+        users!inner(id, nombre, apellido, sede, area)
+      `);
+
+    // Solo filtrar por user_id si NO es admin
+    if (userRole !== 'admin') {
+      query = query.eq('user_id', user.id);
     }
-  };
 
+    // Aplicar filtro por sede si no es "todos"
+    if (sedeSeleccionada !== 'todos') {
+      query = query.eq('users.sede', sedeSeleccionada);
+    }
+
+    // Ejecutar la consulta ordenada por fecha
+    const { data: diasData, error: diasError } = await query
+      .order('fecha', { ascending: true });
+
+    if (diasError) throw diasError;
+
+    setTodosDiasLibres(diasData || []);
+  } catch (error) {
+    console.error('Error cargando días libres:', error);
+    toast.error('Error al cargar días libres: ' + error.message);
+  } finally {
+    setIsLoading(false);
+  }
+};
+  
+  
+  
+  
   // Generar color único para cada usuario
   const generarColorUsuario = (userId) => {
     const hash = userId.split('').reduce((acc, char) => {
@@ -658,58 +692,64 @@ function GestionDiasLibres() {
 
   // Manejar selección de fecha para asignar día libre
   const handleDateChange = (date) => {
-    setSelectedDate(date);
+    // Crear nueva fecha sin componente de hora/localidad
+    const adjustedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    setSelectedDate(adjustedDate);
     setModoAsignacion(true);
   };
 
   // Agregar nuevo día libre
   const agregarDiaLibre = async () => {
-    if (!usuarioParaAsignar || !selectedDate) {
-      toast.error('Selecciona un usuario y una fecha');
+  if (!usuarioParaAsignar || !selectedDate) {
+    toast.error('Selecciona un usuario y una fecha');
+    return;
+  }
+
+  setIsSubmitting(true);
+
+  try {
+    // Formatear la fecha manualmente (YYYY-MM-DD)
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(selectedDate.getDate()).padStart(2, '0');
+    const fechaFormateada = `${year}-${month}-${day}`;
+    
+    // Verificar si ya existe un día libre
+    const { data: existing, error: existingError } = await supabase
+      .from('dias_libres')
+      .select('id')
+      .eq('user_id', usuarioParaAsignar)
+      .eq('fecha', fechaFormateada)
+      .maybeSingle();
+
+    if (existingError) throw existingError;
+    if (existing) {
+      toast.error('Este usuario ya tiene un día libre para esta fecha');
       return;
     }
 
-    setIsSubmitting(true);
+    // Crear nuevo día libre
+    const { error } = await supabase
+      .from('dias_libres')
+      .insert([{
+        user_id: usuarioParaAsignar,
+        fecha: fechaFormateada,
+        todo_el_dia: true
+      }]);
 
-    try {
-      const fechaFormateada = selectedDate.toISOString().split('T')[0];
-      
-      // Verificar si ya existe un día libre para este usuario en esta fecha
-      const { data: existing, error: existingError } = await supabase
-        .from('dias_libres')
-        .select('id')
-        .eq('user_id', usuarioParaAsignar)
-        .eq('fecha', fechaFormateada)
-        .maybeSingle();
+    if (error) throw error;
 
-      if (existingError) throw existingError;
-      if (existing) {
-        toast.error('Este usuario ya tiene un día libre para esta fecha');
-        return;
-      }
-
-      // Crear nuevo día libre
-      const { error } = await supabase
-        .from('dias_libres')
-        .insert([{
-          user_id: usuarioParaAsignar,
-          fecha: fechaFormateada,
-          todo_el_dia: true
-        }]);
-
-      if (error) throw error;
-
-      toast.success('Día libre agregado correctamente');
-      await cargarTodosDiasLibres();
-      setModoAsignacion(false);
-      setUsuarioParaAsignar('');
-    } catch (error) {
-      console.error('Error agregando día libre:', error);
-      toast.error('Error al agregar día libre: ' + error.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    toast.success('Día libre agregado correctamente');
+    await cargarTodosDiasLibres();
+    setModoAsignacion(false);
+    setUsuarioParaAsignar('');
+  } catch (error) {
+    console.error('Error agregando día libre:', error);
+    toast.error('Error al agregar día libre: ' + error.message);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   // Eliminar día libre
   const eliminarDiaLibre = async (id) => {
@@ -913,7 +953,7 @@ function MisDatos({ userData }) {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Sede</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Sede Principal</label>
           <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
             <p className="text-gray-900">{userData.sede || 'No especificado'}</p>
           </div>
@@ -1040,17 +1080,24 @@ function PaginaPrincipal() {
     }
   };
 
-  const isAdminUser = () => {
-    if (!userEmail) return false;
-    
-    const adminEmails = [
-      'admin_oficinas@sanpedrocargo.com',
-      'admin_ruta@sanpedrocargo.com',
-      'gina_yurivilca@transportessanpedro.com',
-      'judith_yurivilca@transportessanpedro.com'
-    ].map(email => email.toLowerCase());
+  const isAdminUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
   
-    return adminEmails.includes(userEmail.toLowerCase());
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+  
+      if (error) throw error;
+      
+      return userData?.role === 'admin';
+    } catch (error) {
+      console.error('Error verificando rol de admin:', error);
+      return false;
+    }
   };
 
   const buscarLugaresTrabajo = async () => {
@@ -1407,7 +1454,8 @@ function PaginaPrincipal() {
                           weekday: 'long',
                           year: 'numeric',
                           month: 'long',
-                          day: 'numeric'
+                          day: 'numeric',
+                          timeZone: 'UTC' 
                         })}
                       </p>
                     </div>
