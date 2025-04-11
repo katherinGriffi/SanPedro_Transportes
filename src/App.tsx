@@ -691,11 +691,17 @@ function GestionDiasLibres() {
 
   // Manejar selección de fecha para asignar día libre
   const handleDateChange = (date) => {
-    // Crear nueva fecha sin componente de hora/localidad
-    const adjustedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    setSelectedDate(adjustedDate);
-    setModoAsignacion(true);
-  };
+  // Ajustar la fecha para evitar problemas de zona horaria
+  const adjustedDate = new Date(
+    Date.UTC(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate()
+    )
+  );
+  setSelectedDate(adjustedDate);
+  setModoAsignacion(true);
+};
 
   // Agregar nuevo día libre
   const agregarDiaLibre = async () => {
@@ -707,11 +713,13 @@ function GestionDiasLibres() {
     setIsSubmitting(true);
   
     try {
-      // Formatear la fecha sin tener en cuenta la zona horaria
+      // Crear fecha sin componente de hora y sin ajuste de zona horaria
       const fechaFormateada = new Date(
-        selectedDate.getFullYear(),
-        selectedDate.getMonth(),
-        selectedDate.getDate()
+        Date.UTC(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate()
+        )
       ).toISOString().split('T')[0];
       
       // Verificar si ya existe un día libre para este usuario en esta fecha
@@ -724,7 +732,7 @@ function GestionDiasLibres() {
   
       if (existingError) throw existingError;
       if (existing) {
-        toast.error('Este usuario ya tiene un día libre para esta fecha, escoge otro dia');
+        toast.error('Este usuario ya tiene un día libre para esta fecha');
         return;
       }
   
@@ -845,6 +853,7 @@ function GestionDiasLibres() {
             <h3 className="font-medium text-gray-800 mb-2">Asignar Día Libre</h3>
             <p className="text-lg font-semibold mb-2">
               {selectedDate.toLocaleDateString('es-ES', { 
+                timeZone: 'UTC',
                 weekday: 'long', 
                 day: 'numeric', 
                 month: 'long', 
@@ -1395,85 +1404,120 @@ function PaginaPrincipal() {
   };
 
   const renderAdminContent = () => {
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [loading, setLoading] = useState(true);
+  
+    useEffect(() => {
+      const checkAdminStatus = async () => {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) {
+            setIsAdmin(false);
+            return;
+          }
+  
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+  
+          if (error) throw error;
+          setIsAdmin(userData?.role === 'admin');
+        } catch (error) {
+          console.error('Error checking admin status:', error);
+          setIsAdmin(false);
+        } finally {
+          setLoading(false);
+        }
+      };
+  
+      checkAdminStatus();
+    }, []);
+  
+    if (loading) {
+      return (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      );
+    }
+  
     return (
       <div className="flex">
-        {/* Barra lateral */}
-        <div className="w-64 bg-gray-100 p-4">
-          <button
-            className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
-              activeTab === 'registro'
-                ? 'bg-blue-500 text-white'
-                : 'text-gray-500 hover:bg-gray-200'
-            }`}
-            onClick={() => setActiveTab('registro')}
-          >
-            <Truck className="w-4 h-4 mr-2" />
-            General
-          </button>
-          
-          <button
-            className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
-              activeTab === 'boletas'
-                ? 'bg-blue-500 text-white'
-                : 'text-gray-500 hover:bg-gray-200'
-            }`}
-            onClick={() => setActiveTab('boletas')}
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            Gestión Boletas
-          </button>
-          
-          <button
-            className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
-              activeTab === 'dias-libres'
-                ? 'bg-blue-500 text-white'
-                : 'text-gray-500 hover:bg-gray-200'
-            }`}
-            onClick={() => setActiveTab('dias-libres')}
-          >
-            <Calendar className="w-4 h-4 mr-2" />
-            Gestión Días Libres
-          </button>
-          
-          <button
-            className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
-              activeTab === 'dashboard'
-                ? 'bg-blue-500 text-white'
-                : 'text-gray-500 hover:bg-gray-200'
-            }`}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Dashboard
-          </button>
-  
-          
-        </div>
-  
-        {/* Conteúdo principal */}
-        <div className="flex-1 p-6">
-          <div className="transition-all duration-200">
-            {activeTab === 'registro' && (
-              <div className="animate-fadeIn">
-                {renderNormalUserContent()}
-              </div>
-            )}
+        {/* Barra lateral - Solo visible para admin */}
+        {isAdmin && (
+          <div className="w-64 bg-gray-100 p-4">
+            <button
+              className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
+                activeTab === 'registro'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-500 hover:bg-gray-200'
+              }`}
+              onClick={() => setActiveTab('registro')}
+            >
+              <Truck className="w-4 h-4 mr-2" />
+              General
+            </button>
             
-            {activeTab === 'boletas' && (
+            <button
+              className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
+                activeTab === 'boletas'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-500 hover:bg-gray-200'
+              }`}
+              onClick={() => setActiveTab('boletas')}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Gestión Boletas
+            </button>
+            
+            <button
+              className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
+                activeTab === 'dias-libres'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-500 hover:bg-gray-200'
+              }`}
+              onClick={() => setActiveTab('dias-libres')}
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              Gestión Días Libres
+            </button>
+            
+            <button
+              className={`px-4 py-2 font-medium text-sm flex items-center w-full mb-4 ${
+                activeTab === 'dashboard'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-500 hover:bg-gray-200'
+              }`}
+              onClick={() => setActiveTab('dashboard')}
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Dashboard
+            </button>
+          </div>
+        )}
+  
+        {/* Contenido principal */}
+        <div className={`${isAdmin ? 'flex-1' : 'w-full'} p-6`}>
+          <div className="transition-all duration-200">
+            {(!isAdmin || activeTab === 'registro') && renderNormalUserContent()}
+            
+            {isAdmin && activeTab === 'boletas' && (
               <div className="animate-fadeIn">
                 <GestionBoletas />
               </div>
             )}
             
-            {activeTab === 'dias-libres' && (
+            {isAdmin && activeTab === 'dias-libres' && (
               <div className="animate-fadeIn">
                 <GestionDiasLibres />
               </div>
             )}
   
-            {activeTab === 'dashboard' && (
+            {isAdmin && activeTab === 'dashboard' && (
               <div className="animate-fadeIn">
                 <div className="bg-white rounded-lg shadow p-4">
                   <iframe 
@@ -1487,8 +1531,6 @@ function PaginaPrincipal() {
                 </div>
               </div>
             )}
-  
-            
           </div>
         </div>
       </div>
@@ -1850,8 +1892,8 @@ function PaginaPrincipal() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {isAdminUser() ? renderAdminContent() : renderNormalUserContent()}
-      </main>
+      {renderAdminContent()}
+    </main>
     </div>
   );
 }
