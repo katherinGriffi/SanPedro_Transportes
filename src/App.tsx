@@ -990,6 +990,7 @@ function PaginaPrincipal() {
   const [activeTab, setActiveTab] = useState('registro');
   const [userActiveTab, setUserActiveTab] = useState('registro');
   const [userData, setUserData] = useState(null);
+  const [gpsDisabled, setGpsDisabled] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1065,6 +1066,60 @@ function PaginaPrincipal() {
     getSession();
   }, []);
 
+  const handleActivarGPS = () => {
+    // Intentar abrir configuración de ubicación en dispositivos móviles
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      // Dispositivos móviles
+      window.location.href = 'app-settings:location'; // Intenta abrir configuración (soporte varía por dispositivo)
+    } else {
+      // Navegadores de escritorio
+      if (navigator.permissions) {
+        // Navegadores que soportan la API de permisos
+        navigator.permissions.query({name: 'geolocation'}).then(permissionStatus => {
+          if (permissionStatus.state === 'prompt') {
+            // Solicitar permisos directamente
+            navigator.geolocation.getCurrentPosition(
+              () => toast.success('Permisos concedidos'),
+              () => toast.error('Permisos denegados'),
+              { maximumAge: 0 }
+            );
+          } else if (permissionStatus.state === 'denied') {
+            // Guiar al usuario a ajustes del navegador
+            toast(
+              <div>
+                <p>Debes habilitar manualmente los permisos de ubicación en:</p>
+                <p className="font-bold">Ajustes del navegador → Privacidad y seguridad → Configuración de ubicación</p>
+              </div>,
+              { duration: 6000 }
+            );
+          }
+        });
+      } else {
+        // Navegadores más antiguos
+        toast(
+          <div>
+            <p>Por favor habilita manualmente el GPS y los permisos de ubicación en:</p>
+            <p className="font-bold">Configuración de tu dispositivo → Ubicación</p>
+          </div>,
+          { duration: 6000 }
+        );
+      }
+    }
+    
+    // Volver a intentar obtener ubicación
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUbicacionActual(position.coords);
+        setGpsDisabled(false);
+      },
+      () => setGpsDisabled(true)
+    );
+  };
+
+
+
+  
+  
   const buscarDiasLibres = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -1170,106 +1225,154 @@ function PaginaPrincipal() {
       toast.error('Usuario no autenticado');
       return;
     }
-
+  
     if (estaProcesando) return;
     setEstaProcesando(true);
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const lugarSeleccionado = lugarTrabajo === 'Otro' ? lugarPersonalizado : lugarTrabajo;
-
-            const nuevoRegistro = {
-              user_id: userId,
-              workplace: lugarSeleccionado,
-              start_time: new Date().toISOString(),
-              start_latitude: position.coords.latitude,
-              start_longitude: position.coords.longitude,
-            };
-
-            const { data: registro, error } = await supabase
-              .from('time_entries')
-              .insert([nuevoRegistro])
-              .select()
-              .single();
-
-            if (error) throw error;
-
-            setRegistroTiempo(registro);
-            setEstaTrabajando(true);
-            setUbicacionActual(position.coords);
-            toast.success('¡Turno iniciado!');
-            buscarTodosRegistros(userId);
-          } catch (error) {
-            console.error('Error iniciando turno:', error);
-            toast.error('Error al iniciar el turno');
-          } finally {
-            setEstaProcesando(false);
-          }
-        },
-        () => {
-          toast.error('No se pudo obtener tu ubicación');
-          setEstaProcesando(false);
+    
+    const obtenerUbicacion = () => {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          setGpsDisabled(true);
+          toast.error('Tu navegador no soporta geolocalización');
+          resolve(null);
+          return;
         }
-      );
+    
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setGpsDisabled(false);
+            setUbicacionActual(position.coords);
+            resolve(position.coords);
+          },
+          (error) => {
+            setGpsDisabled(true);
+            let errorMessage = 'Error al obtener ubicación';
+            
+            switch(error.code) {
+              case error.PERMISSION_DENIED:
+                errorMessage = 'Permisos de ubicación denegados';
+                break;
+              case error.POSITION_UNAVAILABLE:
+                errorMessage = 'Información de ubicación no disponible';
+                break;
+              case error.TIMEOUT:
+                errorMessage = 'Tiempo de espera agotado';
+                break;
+            }
+            
+            toast.error(errorMessage);
+            resolve(null);
+          },
+          { 
+            timeout: 10000,
+            maximumAge: 0,
+            enableHighAccuracy: true 
+          }
+        );
+      });
+    };
+  
+    try {
+      const coords = await obtenerUbicacion();
+      const lugarSeleccionado = lugarTrabajo === 'Otro' ? lugarPersonalizado : lugarTrabajo;
+  
+      const nuevoRegistro = {
+        user_id: userId,
+        workplace: lugarSeleccionado,
+        start_time: new Date().toISOString(),
+        start_latitude: coords?.latitude || null,
+        start_longitude: coords?.longitude || null,
+      };
+  
+      const { data: registro, error } = await supabase
+        .from('time_entries')
+        .insert([nuevoRegistro])
+        .select()
+        .single();
+  
+      if (error) throw error;
+  
+      setRegistroTiempo(registro);
+      setEstaTrabajando(true);
+      setUbicacionActual(coords);
+      toast.success('¡Turno iniciado!');
+      buscarTodosRegistros(userId);
+    } catch (error) {
+      console.error('Error iniciando turno:', error);
+      toast.error('Error al iniciar el turno');
+    } finally {
+      setEstaProcesando(false);
     }
   };
 
   const finalizarTurno = async () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocalización no soportada');
-      return;
-    }
-
     if (!registroTiempo?.id) {
       toast.error('No se encontró un turno activo');
       return;
     }
-
+  
     if (estaProcesando) return;
     setEstaProcesando(true);
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const actualizaciones = {
-            end_time: new Date().toISOString(),
-            end_latitude: position.coords.latitude,
-            end_longitude: position.coords.longitude,
-          };
-
-          const { data: registroActualizado, error } = await supabase
-            .from('time_entries')
-            .update(actualizaciones)
-            .eq('id', registroTiempo.id)
-            .select()
-            .single();
-
-          if (error) throw error;
-
-          const tiempoTotal = formatDuration(new Date(actualizaciones.end_time).getTime() - new Date(registroTiempo.start_time).getTime());
-          toast.success(`¡Turno finalizado! Tiempo trabajado: ${tiempoTotal}`);
-
-          setRegistroTiempo(null);
-          setEstaTrabajando(false);
-          setTiempoTranscurrido(0);
-          setUbicacionActual(null);
-          setUltimoRegistro(null);
-          buscarTodosRegistros(userId);
-        } catch (error) {
-          console.error('Error finalizando turno:', error);
-          toast.error('Error al finalizar el turno');
-        } finally {
-          setEstaProcesando(false);
+    
+  
+    const obtenerUbicacion = () => {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          setGpsDisabled(true);
+          resolve(null);
+          return;
         }
-      },
-      (error) => {
-        console.error('Error obteniendo ubicación:', error);
-        toast.error('No se pudo obtener tu ubicación');
-        setEstaProcesando(false);
-      }
-    );
+    
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setGpsDisabled(false);
+            resolve(position.coords);
+          },
+          () => {
+            setGpsDisabled(true);
+            resolve(null);
+          },
+          { timeout: 5000 }
+        );
+      });
+    };
+  
+    try {
+      const coords = await obtenerUbicacion();
+      const actualizaciones = {
+        end_time: new Date().toISOString(),
+        end_latitude: coords?.latitude || null,
+        end_longitude: coords?.longitude || null,
+      };
+  
+      const { data: registroActualizado, error } = await supabase
+        .from('time_entries')
+        .update(actualizaciones)
+        .eq('id', registroTiempo.id)
+        .select()
+        .single();
+  
+      if (error) throw error;
+  
+      const tiempoTotal = formatDuration(
+        new Date(actualizaciones.end_time).getTime() - 
+        new Date(registroTiempo.start_time).getTime()
+      );
+      toast.success(`¡Turno finalizado! Tiempo trabajado: ${tiempoTotal}`);
+  
+      setRegistroTiempo(null);
+      setEstaTrabajando(false);
+      setTiempoTranscurrido(0);
+      setUbicacionActual(null);
+      setUltimoRegistro(null);
+      buscarTodosRegistros(userId);
+    } catch (error) {
+      console.error('Error finalizando turno:', error);
+      toast.error('Error al finalizar el turno');
+    } finally {
+      setEstaProcesando(false);
+    }
   };
 
   const estiloEvento = (evento) => {
@@ -1444,6 +1547,28 @@ function PaginaPrincipal() {
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">
                   Estado del Turno
                 </h2>
+
+                {gpsDisabled && (
+                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4 rounded-md">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <MapPin className="h-5 w-5 text-yellow-400" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm text-yellow-700">
+                        Para un registro completo, active su GPS y conceda permisos de ubicación.
+                        <button 
+                          onClick={handleActivarGPS}
+                          className="ml-2 text-yellow-700 hover:text-yellow-600 font-medium underline"
+                        >
+                          Activar ahora
+                        </button>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
                 <div className="space-y-4">
                   <div className="flex items-start space-x-3">
                     <Calendar className="w-5 h-5 text-gray-500 mt-1" />
@@ -1483,25 +1608,31 @@ function PaginaPrincipal() {
                         </div>
                       </div>
 
-                      <div className="flex items-start space-x-3">
-                        <MapPinned className="w-5 h-5 text-gray-500 mt-1" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Lugar de Trabajo</p>
-                          <p className="text-sm text-gray-600">{registroTiempo.workplace}</p>
-                        </div>
-                      </div>
+                      
 
                       {ubicacionActual && (
                         <div className="flex items-start space-x-3">
-                          <MapPin className="w-5 h-5 text-gray-500 mt-1" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
+                        <MapPin className={`w-5 h-5 mt-1 ${ubicacionActual ? 'text-green-500' : 'text-red-500'}`} />
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Ubicación Actual</p>
+                          {ubicacionActual ? (
                             <p className="text-sm text-gray-600">
                               Lat: {ubicacionActual.latitude.toFixed(6)}<br />
                               Long: {ubicacionActual.longitude.toFixed(6)}
                             </p>
-                          </div>
+                          ) : (
+                            <p className="text-sm text-gray-600">
+                              No disponible<br />
+                              <button 
+                                onClick={handleActivarGPS}
+                                className="text-blue-600 hover:underline text-xs"
+                              >
+                                Activar GPS
+                              </button>
+                            </p>
+                          )}
                         </div>
+                      </div>
                       )}
                     </>
                   )}
