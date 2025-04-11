@@ -33,52 +33,51 @@ function IniciarSesion() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-  
+
     try {
       toast.dismiss();
-  
-      // 🔹 FORÇAR REMOÇÃO DA SESSÃO ANTERIOR
-      await supabase.auth.signOut();
-      localStorage.clear();  
-      sessionStorage.clear();
-  
-      // 🔹 Tentar autenticar com email e senha
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-  
-      if (authError) throw new Error(authError.message || 'Erro na autenticação.');
-      if (!user) throw new Error('No se recibió información del usuario.');
-  
-      // 🔹 Buscar dados do usuário na base de dados
+
+      if (authError) {
+        throw authError;
+      }
+
+      if (!user) {
+        throw new Error('No se recibió información del usuario');
+      }
+
+      // Verifica el estado del usuario
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('activo, email, nombre, apellido')
         .eq('id', user.id)
         .single();
-  
-      if (userError || !userData) throw new Error(userError?.message || 'Erro ao verificar o estado do usuário.');
-  
-      // 🔹 Verificar se a conta do usuário está ativa
-      if (!userData.activo) {
-        await supabase.auth.signOut(); 
+
+      if (userError || !userData) {
+        throw userError || new Error('Error al verificar el estado del usuario');
+      }
+
+      if (userData.activo !== true) {
+        await supabase.auth.signOut();
         throw new Error('Tu cuenta no está activa. Contacta al administrador.');
       }
-  
-      // 🔹 FORÇAR ATUALIZAÇÃO PARA EVITAR CACHE DA SESSÃO
-      window.location.reload();
-  
-      // Redirecionar usuário autenticado
+
+      // Limpiar caché antes de redirigir
+      localStorage.removeItem('sb-auth-token');
+      sessionStorage.removeItem('sb-auth-token');
+
+      // Redirige después de autenticar
       navigate('/');
     } catch (error) {
-      console.error('Erro no login:', error);
-      toast.error(error.message || 'Ocorreu um erro inesperado.');
+      console.error('Error en login:', error);
+      toast.error(error.message);
     } finally {
       setIsLoading(false);
     }
   };
-  
   
   
 
@@ -725,7 +724,7 @@ function GestionDiasLibres() {
   
       if (existingError) throw existingError;
       if (existing) {
-        toast.error('Este usuario ya tiene un día libre para esta fecha');
+        toast.error('Este usuario ya tiene un día libre para esta fecha, escoge otro dia');
         return;
       }
   
