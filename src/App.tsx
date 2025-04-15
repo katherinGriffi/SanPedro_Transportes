@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-import './index.css'; 
-import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, MapPinned, Timer, FileText, Upload, Download, Table2Icon, Table, PanelsTopLeft, PersonStanding, PersonStandingIcon } from 'lucide-react';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import './index.css';
+import { Truck, Clock, MapPin, LogIn, LogOut, Calendar, User, FileText, Upload, Download } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import toast, { Toaster } from 'react-hot-toast';
 import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'moment/locale/es';
+
+// Componente para seleccionar el router adecuado
+const AppRouter = ({ children }: { children: React.ReactNode }) => {
+  return import.meta.env.PROD ? (
+    <HashRouter>{children}</HashRouter>
+  ) : (
+    <BrowserRouter>{children}</BrowserRouter>
+  );
+};
 
 // Configuración del calendario
 const localizer = momentLocalizer(moment);
@@ -16,7 +25,20 @@ moment.locale('es', {
   weekdays: 'Domingo_Lunes_Martes_Miércoles_Jueves_Viernes_Sábado'.split('_')
 });
 
-function formatDuration(milliseconds) {
+// Función para limpiar la caché de autenticación
+const clearAuthCache = async () => {
+  try {
+    await supabase.auth.signOut();
+    localStorage.removeItem('sb-auth-token');
+    localStorage.removeItem(`sb-${import.meta.env.VITE_SUPABASE_URL}-auth-token`);
+    sessionStorage.removeItem('sb-auth-token');
+    sessionStorage.removeItem(`sb-${import.meta.env.VITE_SUPABASE_URL}-auth-token`);
+  } catch (error) {
+    console.error('Error clearing auth cache:', error);
+  }
+};
+
+function formatDuration(milliseconds: number) {
   const seconds = Math.floor(milliseconds / 1000);
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -24,109 +46,73 @@ function formatDuration(milliseconds) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
+// Componente de Login
 function IniciarSesion() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
+  
     try {
-      toast.dismiss();
-      const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
+      // Limpiar caché existente
+      await supabase.auth.signOut();
+      localStorage.removeItem('sb-auth-token');
+      
+      // Forzar nuevo login
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
-      if (authError) {
-        throw authError;
-      }
-
-      if (!user) {
-        throw new Error('No se recibió información del usuario');
-      }
-
-      // Verifica el estado del usuario
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('activo, email, nombre, apellido')
-        .eq('id', user.id)
-        .single();
-
-      if (userError || !userData) {
-        throw userError || new Error('Error al verificar el estado del usuario');
-      }
-
-      if (userData.activo !== true) {
-        await supabase.auth.signOut();
-        throw new Error('Tu cuenta no está activa. Contacta al administrador.');
-      }
-
-      // Limpiar caché antes de redirigir
-      localStorage.removeItem('sb-auth-token');
-      sessionStorage.removeItem('sb-auth-token');
-
-      // Redirige después de autenticar
-      navigate('/');
+  
+      if (error) throw error;
+      if (!data?.session) throw new Error('No session created');
+  
+      // Redirigir con recarga completa para asegurar estado limpio
+      window.location.href = '/';
+      
     } catch (error) {
-      console.error('Error en login:', error);
-      toast.error(error.message);
+      toast.error(error instanceof Error ? error.message : 'Error al iniciar sesión');
     } finally {
       setIsLoading(false);
     }
   };
-  
-  
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center p-4">
       <Toaster position="top-right" />
       <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
-        <div className="flex items-center justify-center mb-8">
-          <Truck className="w-12 h-12 text-blue-600" />
-        </div>
-        <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">
-          Transportes San Pedro
-        </h1>
-        
+        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Iniciar Sesión</h2>
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
               required
-              disabled={isLoading}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Contraseña
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
               required
-              disabled={isLoading}
             />
           </div>
           <button
             type="submit"
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
             disabled={isLoading}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
-            <LogIn className="w-5 h-5 mr-2" />
-            {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+            {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
           </button>
         </form>
       </div>
@@ -1645,14 +1631,14 @@ function PaginaPrincipal() {
                       </div>
                       
                       <div className="flex items-start space-x-3">
-                        <Timer className="w-5 h-5 text-gray-500 mt-1" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
-                          <p className="text-xl font-bold text-blue-600">
-                            {formatDuration(tiempoTranscurrido)}
-                          </p>
-                        </div>
-                      </div>
+                <Clock className="w-5 h-5 text-gray-500 mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Tiempo Transcurrido</p>
+                  <p className="text-xl font-bold text-blue-600">
+                    {formatDuration(tiempoTranscurrido)}
+                  </p>
+                </div>
+              </div>
 
                       
 
@@ -1902,98 +1888,103 @@ function PaginaPrincipal() {
   );
 }
 
+// Componente principal de la aplicación
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authState, setAuthState] = useState({
+    isLoading: true,
+    isAuthenticated: false,
+    user: null
+  });
 
   useEffect(() => {
-    const cleanCache = async () => {
-      if ('serviceWorker' in navigator) {
-        try {
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(registrations.map(r => r.unregister()));
-    
-          const cacheNames = await caches.keys();
-          await Promise.all(cacheNames.map(name => caches.delete(name)));
-    
-          if (registrations.length > 0 || cacheNames.length > 0) {
-            window.location.reload(true);
-          }
-        } catch (error) {
-          console.error('Error cleaning cache:', error);
-        }
-      }
-    
-      localStorage.removeItem('sb-auth-token');
-      sessionStorage.removeItem('sb-auth-token');
-      document.cookie.split(';').forEach(c => {
-        document.cookie = c.replace(/^ +/, '').replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
-      });
-    };
-    
-    cleanCache();
-
     const checkAuth = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession({
+        // 1. Forzar refresco de sesión
+        const { data: { session }, error } = await supabase.auth.getSession({
           forceRefresh: true
         });
-        
-        if (sessionError || !session?.user) {
-          setIsLoggedIn(false);
-          return;
+
+        if (error || !session) {
+          throw new Error(error?.message || 'No active session');
         }
-    
-        const { data: userData, error: userError } = await supabase
+
+        // 2. Verificar usuario en la base de datos
+        const { data: user, error: userError } = await supabase
           .from('users')
-          .select('activo, nombre, apellido')
+          .select('*')
           .eq('id', session.user.id)
-          .single()
-          .throwOnError();
-          
-        setIsLoggedIn(!!userData?.activo);
-        if (!userData?.activo) {
+          .single();
+
+        if (userError || !user?.activo) {
           await supabase.auth.signOut();
+          throw new Error(userError?.message || 'User not active');
         }
+
+        setAuthState({
+          isLoading: false,
+          isAuthenticated: true,
+          user
+        });
       } catch (error) {
-        console.error('Auth check error:', error);
+        console.log('Auth check error:', error instanceof Error ? error.message : 'Error desconocido');
         await supabase.auth.signOut();
-        setIsLoggedIn(false);
+        setAuthState({
+          isLoading: false,
+          isAuthenticated: false,
+          user: null
+        });
       }
     };
 
     checkAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('activo, nombre, apellido')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (userError || !userData?.activo) {
-          await supabase.auth.signOut();
-          setIsLoggedIn(false);
-        } else {
-          setIsLoggedIn(true);
+    // Escuchar cambios de autenticación
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          await checkAuth();
+        } else if (event === 'SIGNED_OUT') {
+          setAuthState({
+            isLoading: false,
+            isAuthenticated: false,
+            user: null
+          });
         }
-      } else {
-        setIsLoggedIn(false);
       }
-    });
+    );
 
     return () => subscription?.unsubscribe();
   }, []);
 
+  if (authState.isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
-    <Router>
+    <AppRouter>
       <Toaster position="top-right" />
       <Routes>
-        <Route path="/" element={isLoggedIn ? <PaginaPrincipal /> : <IniciarSesion />} />
+        <Route
+          path="/"
+          element={
+            authState.isAuthenticated ? (
+              <PaginaPrincipal user={authState.user} />
+            ) : (
+              <IniciarSesion />
+            )
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </Router>
+    </AppRouter>
   );
 }
 
 export default App;
+
+
+
