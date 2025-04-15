@@ -11,10 +11,12 @@ import 'moment/locale/es';
 
 // Componente para seleccionar el router adecuado
 const AppRouter = ({ children }: { children: React.ReactNode }) => {
+  const basename = import.meta.env.PROD ? window.location.pathname : '/';
+  
   return import.meta.env.PROD ? (
-    <HashRouter>{children}</HashRouter>
+    <HashRouter basename={basename}>{children}</HashRouter>
   ) : (
-    <BrowserRouter>{children}</BrowserRouter>
+    <BrowserRouter basename={basename}>{children}</BrowserRouter>
   );
 };
 
@@ -56,13 +58,10 @@ function IniciarSesion() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-  
+    
     try {
-      // Limpiar caché existente
-      await supabase.auth.signOut();
-      localStorage.removeItem('sb-auth-token');
+      await clearAuthCache();
       
-      // Forzar nuevo login
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -71,8 +70,10 @@ function IniciarSesion() {
       if (error) throw error;
       if (!data?.session) throw new Error('No session created');
   
-      // Redirigir con recarga completa para asegurar estado limpio
-      window.location.href = '/';
+      // Redirecionamento universal que funciona em qualquer ambiente
+      window.location.href = window.location.origin + 
+                           (import.meta.env.BASE_URL || '') + 
+                           '#/';
       
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al iniciar sesión');
