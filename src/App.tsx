@@ -154,12 +154,8 @@ function MisBoletas({ userId }) {
   return (
     <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
       <h2 className="text-lg font-semibold text-gray-900 mb-6">
-        Mis Boletas de Pago 
+        Mis Boletas de Pago
       </h2>
-      <h4 className="text-lg font-semibold text-red-900 mb-10">           
-        
-      ¡Muy pronto podrás acceder a tus boletas de pago aquí! 🚀
-      </h4>
 
       {isLoading ? (
         <p className="text-sm text-gray-500">Cargando...</p>
@@ -1757,7 +1753,7 @@ function PaginaPrincipal() {
                   <span className="text-sm text-gray-950">Turno Completado</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-yellow-400 rounded-sm"></div>
+                  <div className="w-4 h-4 bg-[#ffc107] rounded-sm"></div>
                   <span className="text-sm text-gray-950">Turno en Progreso</span>
                 </div>
                 <div className="flex items-center space-x-2">
