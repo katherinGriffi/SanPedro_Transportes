@@ -11,7 +11,9 @@ import 'moment/locale/es';
 
 // Componente para seleccionar el router adecuado
 const AppRouter = ({ children }: { children: React.ReactNode }) => {
-  const basename = import.meta.env.PROD ? window.location.pathname : '/';
+  const basename = window.location.pathname.startsWith('/SanPedro_Transportes') 
+    ? '/SanPedro_Transportes' 
+    : '/';
   
   return import.meta.env.PROD ? (
     <HashRouter basename={basename}>{children}</HashRouter>
