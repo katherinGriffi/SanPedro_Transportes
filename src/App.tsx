@@ -44,40 +44,87 @@ function IniciarSesion() {
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
+  
+    console.log('Iniciando sesión...');
 
     try {
       toast.dismiss();
-      const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
+      console.log(`Autenticando al usuario con email: ${email}`);
+
+      // 1. Autenticación con Supabase
+      const { data: { user, session }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (authError) throw authError;
-      if (!user) throw new Error('No se recibió información del usuario');
+      if (authError) {
+        console.error('Error de autenticación:', authError);
+        throw authError;
+      }
 
+      if (!user || !session) {
+        throw new Error('No se recibió información del usuario o sesión');
+      }
+
+      console.log('Usuario autenticado:', user.id);
+
+      // 2. Verificar estado del usuario en la tabla users
+      console.log('Consultando datos del usuario...');
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('activo, email, nombre, apellido')
         .eq('id', user.id)
         .single();
 
-      if (userError || !userData) throw userError || new Error('Error al verificar el estado del usuario');
+      if (userError) {
+        console.error('Error al obtener datos del usuario:', userError);
+        throw userError;
+      }
+
+      if (!userData) {
+        throw new Error('Usuario no encontrado en la base de datos');
+      }
 
       if (userData.activo !== true) {
+        console.log('Usuario no activo. Cerrando sesión...');
         await supabase.auth.signOut();
         throw new Error('Tu cuenta no está activa. Contacta al administrador.');
       }
 
-      localStorage.removeItem('sb-auth-token');
-      sessionStorage.removeItem('sb-auth-token');
-      navigate('/');
+      // 3. Almacenar datos importantes
+      localStorage.setItem('sb-access-token', session.access_token);
+      localStorage.setItem('sb-refresh-token', session.refresh_token);
+      localStorage.setItem('user', JSON.stringify({
+        id: user.id,
+        email: user.email,
+        nombre: userData.nombre,
+        apellido: userData.apellido
+      }));
+
+      console.log('Inicio de sesión exitoso. Redirigiendo...');
+      
+      // 4. Redirección (solución para GitHub Pages)
+      if (window.location.hostname.includes('github.io')) {
+        window.location.href = '/SanPedro_Transportes/#/'; // Ajusta según tu ruta base
+      } else {
+        navigate('/');
+      }
+
     } catch (error: any) {
       console.error('Error en login:', error);
-      toast.error(error.message);
+      toast.error(error.message || 'Error al iniciar sesión');
+      
+      // Limpiar credenciales en caso de error
+      localStorage.removeItem('sb-access-token');
+      localStorage.removeItem('sb-refresh-token');
+      localStorage.removeItem('user');
+      
     } finally {
       setIsLoading(false);
     }
   };
+
+  
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-900 to-blue-700 flex items-center justify-center p-4">
@@ -3019,7 +3066,7 @@ const finalizarTurno = async () => {
                 title="Cerrar sesión"
               >
                 <LogOut className="w-4 h-4 sm:w-5 sm:h-5" /> {/* Icono responsive */}
-                <span>Cerrar sesión</span> {/* Texto cambiado a "SALIDA" */}
+                <span>Cerrar sesión</span> 
               </button>
             </div>
           </div>
