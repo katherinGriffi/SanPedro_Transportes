@@ -1,26 +1,17 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  base: '/SanPedro_Transportes/',
-  server: {
-    host: true,
-    port: 5173,
-    strictPort: true
-  },
-  preview: {
-    port: 5173,
-    strictPort: true
-  },
+  base: './', // 🔥 Isso é CRUCIAL para GitHub Pages!
   build: {
-    outDir: 'dist',
+    outDir: '../docs', // Build na pasta docs/ no nível superior
     emptyOutDir: true,
-    chunkSizeWarningLimit: 1600,
     rollupOptions: {
-      input: {
-        main: path.resolve(__dirname, 'index.html')
+      output: {
+        assetFileNames: 'assets/[name]-[hash][extname]',
+        entryFileNames: 'assets/[name]-[hash].js'
       }
     }
   },
@@ -29,4 +20,4 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src')
     }
   }
-})
+});
